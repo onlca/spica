@@ -23,6 +23,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     public var audioPlayer: AVPlayer?
     private var timeObserver: Any?
     private var securityScopedURLs = [URL]()
+    private var playerItemObservation: NSKeyValueObservation?
     
     // 安全添加歌曲
     func addSongs(_ urls: [URL]) {
@@ -51,35 +52,96 @@ class PlayerViewModel: NSObject, ObservableObject {
     
     // 安全播放控制
     func play(song: SecureSong) {
+        // 如果是继续播放同一首歌曲
+        if let currentSong = currentSong, currentSong.id == song.id {
+            audioPlayer?.play()
+            isPlaying = true
+            return
+        }
+        
+        // 停止当前播放并清理
+        cleanupCurrentPlayback()
+        
         guard song.fileURL.startAccessingSecurityScopedResource() else {
             errorMessage = "播放权限获取失败"
             return
         }
         
-        if currentSong?.id != song.id {
-            audioPlayer?.pause()
-            audioPlayer = AVPlayer(url: song.fileURL)
-            setupPlayerObservers()
-        }
+        // 创建新的播放项
+        let playerItem = AVPlayerItem(url: song.fileURL)
+        audioPlayer = AVPlayer(playerItem: playerItem)
+        
+        // 设置观察者
+        setupPlayerObservers()
+        
+        // 添加播放结束通知观察
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerDidFinishPlaying),
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem
+        )
         
         currentSong = song
         audioPlayer?.play()
         isPlaying = true
     }
     
+    func pause() {
+        audioPlayer?.pause()
+        isPlaying = false
+    }
+    
+    // 清理当前播放资源
+    private func cleanupCurrentPlayback() {
+        // 暂停当前播放
+        audioPlayer?.pause()
+        
+        // 移除时间观察者
+        if let observer = timeObserver {
+            audioPlayer?.removeTimeObserver(observer)
+            timeObserver = nil
+        }
+        
+        // 移除所有通知
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
+    }
+    
+    // 播放结束处理
+    @objc private func playerDidFinishPlaying(notification: Notification) {
+        // 在主线程执行，确保UI更新安全
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  let currentSong = self.currentSong,
+                  let currentIndex = self.playlist.firstIndex(where: { $0.id == currentSong.id }),
+                  !self.playlist.isEmpty else { return }
+                  
+            // 计算下一首歌曲索引
+            let nextIndex = (currentIndex + 1) % self.playlist.count
+            let nextSong = self.playlist[nextIndex]
+            // 播放下一首
+            self.play(song: nextSong)
+        }
+    }
+    
     private func setupPlayerObservers() {
+        // 移除之前的观察者
+        if let observer = timeObserver {
+            audioPlayer?.removeTimeObserver(observer)
+        }
+        
+        // 添加新的时间观察者
         timeObserver = audioPlayer?.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             guard let self, let duration = self.audioPlayer?.currentItem?.duration else { return }
-            self.progress = time.seconds / duration.seconds
+            if !duration.seconds.isNaN && duration.seconds > 0 {
+                self.progress = time.seconds / duration.seconds
+            } else {
+                self.progress = 0
+            }
         }
-    }
-    
-    func pause() {
-        audioPlayer?.pause()
-        isPlaying = false
     }
     
     func stop() {
@@ -95,10 +157,28 @@ class PlayerViewModel: NSObject, ObservableObject {
         securityScopedURLs.removeAll()
     }
     
-    deinit {
-        if let observer = timeObserver {
-            audioPlayer?.removeTimeObserver(observer)
+    // 处理从播放列表中删除歌曲
+    func removeSongFromPlaylist(_ song: SecureSong) {
+        if let index = playlist.firstIndex(where: { $0.id == song.id }) {
+            // 如果删除的是当前播放的歌曲，先停止播放
+            if currentSong?.id == song.id {
+                stop()
+                currentSong = nil
+            }
+            
+            // 从安全资源列表中移除
+            if let urlIndex = securityScopedURLs.firstIndex(of: song.fileURL) {
+                song.fileURL.stopAccessingSecurityScopedResource()
+                securityScopedURLs.remove(at: urlIndex)
+            }
+            
+            // 从播放列表中移除
+            playlist.remove(at: index)
         }
+    }
+    
+    deinit {
+        cleanupCurrentPlayback()
         releaseSecurityScopedResources()
     }
 }
@@ -176,13 +256,7 @@ struct PlaylistView: View {
     }
     
     private func removeSong(_ song: SecureSong) {
-        if let index = viewModel.playlist.firstIndex(where: { $0.id == song.id }) {
-            song.fileURL.stopAccessingSecurityScopedResource()
-            viewModel.playlist.remove(at: index)
-            if viewModel.currentSong?.id == song.id {
-                viewModel.stop()
-            }
-        }
+        viewModel.removeSongFromPlaylist(song)
     }
 }
 
@@ -205,8 +279,8 @@ struct PlayerDetailView: View {
                         let currentTime = viewModel.audioPlayer?.currentTime().seconds ?? 0
                         Text(timeString(time: currentTime))
                     } currentValueLabel: {
-                        let duration = song.duration * (viewModel.progress.isNaN ? 0 : viewModel.progress)
-                        Text(timeString(time: duration))
+                        // 使用歌曲实际总时长，而不是计算值
+                        Text(timeString(time: song.duration))
                     }
                     .padding(.horizontal)
                 }
