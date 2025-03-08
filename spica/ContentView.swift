@@ -1,15 +1,21 @@
 import SwiftUI
 
-
 struct ContentView: View {
     @StateObject private var viewModel = PlayerViewModel()
     @State private var showFileImporter = false
     
     var body: some View {
         NavigationSplitView {
+            // 第一栏：播放列表
             PlaylistView(viewModel: viewModel, showFileImporter: $showFileImporter)
-        } detail: {
+        } content: {
+            // 第二栏：播放器控制
             PlayerDetailView(viewModel: viewModel)
+                .navigationTitle("spica")
+        } detail: {
+            // 第三栏：歌词视图
+            LyricsDetailView(viewModel: viewModel)
+                .navigationTitle("歌词")
         }
         .fileImporter(
             isPresented: $showFileImporter,

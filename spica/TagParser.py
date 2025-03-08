@@ -11,12 +11,14 @@ from datetime import datetime
 
 # 设置日志文件
 LOG_FILE = os.path.expanduser("~/Documents/spica_debug.log")
+LOG_FLAG = False
 
 def log(message):
     """将消息写入日志文件"""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {message}\n")
+    if LOG_FLAG:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {message}\n")
 
 # 记录脚本启动
 log("TagParser.py 脚本启动")
