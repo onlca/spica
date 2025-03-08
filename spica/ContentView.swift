@@ -1,14 +1,17 @@
 import SwiftUI
 import AVKit
 import Combine
+import AppKit  // 添加 AppKit 导入，为 NSImage
 
 // 安全访问文件模型
 struct SecureSong: Identifiable {
     let id = UUID()
     let title: String
     let artist: String
+    let album: String
     let duration: Double
     let fileURL: URL
+    let artwork: NSImage?  // 使用 NSImage 替代 UIImage
     var lyrics: [String] = []
     var securityScoped: Bool = false
 }
@@ -38,11 +41,45 @@ class PlayerViewModel: NSObject, ObservableObject {
             let asset = AVAsset(url: url)
             let duration = CMTimeGetSeconds(asset.duration)
             
+            // 提取元数据
+            let fileExtension = url.pathExtension.lowercased()
+            var title = url.deletingPathExtension().lastPathComponent
+            var artist = "未知艺术家"
+            var album = "未知专辑"
+            var artwork: NSImage? = nil  // 使用 NSImage
+            
+            // 获取 AVAsset 元数据
+            let metadataItems = asset.metadata
+            
+            // 从元数据中获取艺术家
+            if let artistItem = metadataItems.first(where: { $0.commonKey == .commonKeyArtist }) {
+                artist = artistItem.stringValue ?? artist
+            }
+            
+            // 从元数据中获取标题
+            if let titleItem = metadataItems.first(where: { $0.commonKey == .commonKeyTitle }) {
+                title = titleItem.stringValue ?? title
+            }
+            
+            // 从元数据中获取专辑
+            if let albumItem = metadataItems.first(where: { $0.commonKey == .commonKeyAlbumName }) {
+                album = albumItem.stringValue ?? album
+            }
+            
+            // 获取专辑封面
+            if let artworkItem = metadataItems.first(where: { $0.commonKey == .commonKeyArtwork }) {
+                if let data = artworkItem.dataValue {
+                    artwork = NSImage(data: data)  // 使用 NSImage 初始化
+                }
+            }
+            
             let newSong = SecureSong(
-                title: url.deletingPathExtension().lastPathComponent,
-                artist: asset.metadata.first(where: { $0.commonKey == .commonKeyArtist })?.stringValue ?? "未知艺术家",
+                title: title,
+                artist: artist,
+                album: album,
                 duration: duration.isNaN ? 0 : duration,
                 fileURL: url,
+                artwork: artwork,
                 securityScoped: true
             )
             
@@ -304,7 +341,7 @@ struct PlayerDetailView: View {
         }
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        return String(format: "%02d:%02d", minutes, seconds)  // 移除命名参数
     }
 }
 
@@ -314,22 +351,42 @@ struct AlbumArtView: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.thinMaterial)
-                .aspectRatio(1, contentMode: .fit)
-                .overlay(
-                    Image(systemName: "music.note")
-                        .font(.system(size: 60))
-                        .foregroundColor(.secondary)
-                )
+            Group {
+                if let artwork = song.artwork {
+                    Image(nsImage: artwork)  // 使用 nsImage 参数
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .cornerRadius(12)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.thinMaterial)
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .font(.system(size: 60))
+                                .foregroundColor(.secondary)
+                        )
+                }
+            }
+            .frame(maxWidth: 240, maxHeight: 240)
+            .shadow(radius: 4)
             
-            VStack {
+            VStack(spacing: 4) {
                 Text(song.title)
                     .font(.title2.bold())
+                    .lineLimit(1)
+                
                 Text(song.artist)
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                
+                Text(song.album)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
+            .frame(maxWidth: .infinity)
         }
     }
 }
