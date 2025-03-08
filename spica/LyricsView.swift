@@ -53,16 +53,16 @@ struct LyricsView: View {
         }
         .background(Color(.textBackgroundColor).opacity(0.2))
         .cornerRadius(8)
-        // 监听播放进度变化，更新当前歌词
-        .onChange(of: viewModel.progress) { _ in
+        // 监听播放进度变化，更新当前歌词 - 使用新的onChange API
+        .onChange(of: viewModel.progress) { oldValue, newValue in
             updateCurrentLyric()
         }
-        // 当播放状态变化时，也更新歌词
-        .onChange(of: viewModel.isPlaying) { _ in
+        // 当播放状态变化时，也更新歌词 - 使用新的onChange API
+        .onChange(of: viewModel.isPlaying) { oldValue, newValue in
             updateCurrentLyric()
         }
-        // 歌曲切换时重置状态
-        .onChange(of: viewModel.currentSong?.id) { _ in
+        // 歌曲切换时重置状态 - 使用新的onChange API
+        .onChange(of: viewModel.currentSong?.id) { oldValue, newValue in
             currentIndex = 0
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 updateCurrentLyric()
