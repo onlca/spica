@@ -180,16 +180,26 @@ class PythonScriptHelper {
                     }
                 }
                 
+                // 创建不可变的本地副本，解决sendability问题
+                let immutableArtworkData = artworkData
+                let immutableTitle = finalTitle
+                let immutableArtist = finalArtist
+                let immutableAlbum = finalAlbum
+                
                 // 在主线程上创建NSImage并回调所有结果
                 await MainActor.run {
-                    let artwork = artworkData.flatMap { NSImage(data: $0) }
-                    completion(finalTitle, finalArtist, finalAlbum, [], artwork)
+                    let artwork = immutableArtworkData.flatMap { NSImage(data: $0) }
+                    completion(immutableTitle, immutableArtist, immutableAlbum, [], artwork)
                 }
             } catch {
                 print("AVFoundation元数据提取失败: \(error)")
                 // 如果提取失败，返回默认值
+                let immutableTitle = title
+                let immutableArtist = artist
+                let immutableAlbum = album
+                
                 await MainActor.run {
-                    completion(title, artist, album, [], nil)
+                    completion(immutableTitle, immutableArtist, immutableAlbum, [], nil)
                 }
             }
         }
