@@ -35,6 +35,44 @@ except ImportError as e:
     print(json.dumps({"error": "未安装 mutagen 库"}))
     sys.exit(1)
 
+def parse_lyrics_with_timestamps(lyrics_text):
+    """解析带时间标签的歌词"""
+    lines = lyrics_text.split('\n')
+    parsed_lyrics = []
+    
+    # 常见时间标签正则匹配
+    import re
+    # [00:00.00] 或 [00:00:00] 格式
+    time_pattern = re.compile(r'\[(\d+):(\d+)(?:\.(\d+)|:(\d+))?\]')
+    
+    log(f"开始解析带时间标签的歌词，共 {len(lines)} 行")
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        match = time_pattern.search(line)
+        if match:
+            # 提取时间
+            minutes = int(match.group(1))
+            seconds = int(match.group(2))
+            
+            # 转换为总秒数
+            timestamp = minutes * 60 + seconds
+            
+            # 提取歌词内容
+            text = line[match.end():].strip()
+            
+            parsed_lyrics.append({"time": timestamp, "text": text})
+            log(f"解析歌词行: {timestamp}秒 - {text}")
+        else:
+            # 没有时间标签，仍然添加内容
+            parsed_lyrics.append({"time": -1, "text": line})
+            log(f"添加无时间标签歌词: {line}")
+    
+    return parsed_lyrics
+
 def get_tags(file_path):
     """解析音频文件标签"""
     log(f"正在处理文件: {file_path}")
@@ -61,7 +99,7 @@ def get_tags(file_path):
             "artist": "未知艺术家",
             "album": "未知专辑",
             "artwork": None,
-            "lyrics": [] # 添加歌词字段，使用数组保存每行歌词
+            "lyrics": []  # 添加歌词字段，使用数组保存带时间戳的歌词
         }
         
         # 如果无法加载文件
@@ -111,10 +149,9 @@ def get_tags(file_path):
                         log(f"找到歌词标签: {key}")
                         lyrics_text = str(audio[key])
                         
-                        # 拆分歌词行
-                        lyrics_lines = lyrics_text.split('\n')
-                        result["lyrics"] = lyrics_lines
-                        log(f"提取到歌词行数: {len(lyrics_lines)}")
+                        # 尝试解析时间标签
+                        result["lyrics"] = parse_lyrics_with_timestamps(lyrics_text)
+                        log(f"解析到带时间标签歌词: {len(result['lyrics'])} 行")
                         break
             except Exception as e:
                 log(f"处理歌词时出错: {e}")
@@ -140,9 +177,8 @@ def get_tags(file_path):
             # 读取歌词 (LYRICS标签)
             if "LYRICS" in audio:
                 lyrics_text = audio["LYRICS"][0]
-                lyrics_lines = lyrics_text.split('\n')
-                result["lyrics"] = lyrics_lines
-                log(f"提取到歌词行数: {len(lyrics_lines)}")
+                result["lyrics"] = parse_lyrics_with_timestamps(lyrics_text)
+                log(f"解析到带时间标签歌词: {len(result['lyrics'])} 行")
             
             # 读取封面
             try:

@@ -21,7 +21,7 @@ struct PlayerDetailView: View {
                         .padding(.trailing)
                     }
                     
-                    if showLyrics && !song.lyrics.isEmpty {
+                    if showLyrics {
                         // 歌词视图
                         LyricsView(lyrics: song.lyrics, viewModel: viewModel)
                             .frame(height: 240)

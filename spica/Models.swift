@@ -2,6 +2,13 @@ import SwiftUI
 import AVKit
 import AppKit
 
+// 歌词行结构
+struct LyricLine: Identifiable {
+    let id = UUID()
+    let timestamp: Double  // 秒为单位的时间戳，-1表示无时间标签
+    let text: String       // 歌词文本
+}
+
 // 安全访问文件模型
 struct SecureSong: Identifiable {
     let id = UUID()
@@ -11,6 +18,6 @@ struct SecureSong: Identifiable {
     let duration: Double
     let fileURL: URL
     let artwork: NSImage?
-    var lyrics: [String] = []  // 保存歌词行
+    var lyrics: [LyricLine] = []  // 保存带时间戳的歌词
     var securityScoped: Bool = false
 }

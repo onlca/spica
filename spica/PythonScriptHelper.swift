@@ -7,7 +7,7 @@ class PythonScriptHelper {
     
     private init() {}
     
-    func runTagParser(for url: URL, completion: @escaping (String?, String?, String?, [String]?, NSImage?) -> Void) {
+    func runTagParser(for url: URL, completion: @escaping (String?, String?, String?, [LyricLine]?, NSImage?) -> Void) {
         // 确保Python脚本存在
         guard let scriptURL = Bundle.main.url(forResource: "TagParser", withExtension: "py") else {
             print("错误: 找不到TagParser.py脚本")
@@ -77,9 +77,17 @@ class PythonScriptHelper {
                                 let album = json["album"] as? String
                                 
                                 // 解析歌词数据
-                                var lyrics: [String]? = nil
-                                if let lyricsArray = json["lyrics"] as? [String] {
-                                    lyrics = lyricsArray
+                                var lyricLines: [LyricLine] = []
+                                if let lyricsArray = json["lyrics"] as? [[String: Any]] {
+                                    for item in lyricsArray {
+                                        if let text = item["text"] as? String {
+                                            let time = item["time"] as? Double ?? -1
+                                            lyricLines.append(LyricLine(timestamp: time, text: text))
+                                        }
+                                    }
+                                } else if let lyricsArray = json["lyrics"] as? [String] {
+                                    // 兼容无时间戳的纯文本歌词
+                                    lyricLines = lyricsArray.map { LyricLine(timestamp: -1, text: $0) }
                                 }
                                 
                                 var artwork: NSImage? = nil
@@ -110,7 +118,7 @@ class PythonScriptHelper {
                                 
                                 // 在主线程回调结果
                                 DispatchQueue.main.async {
-                                    completion(title, artist, album, lyrics, artwork)
+                                    completion(title, artist, album, lyricLines, artwork)
                                 }
                                 return
                             }
@@ -131,7 +139,7 @@ class PythonScriptHelper {
     }
     
     // 使用AVFoundation作为备用方案
-    private func fallbackToAVFoundation(url: URL, completion: @escaping (String?, String?, String?, [String]?, NSImage?) -> Void) {
+    private func fallbackToAVFoundation(url: URL, completion: @escaping (String?, String?, String?, [LyricLine]?, NSImage?) -> Void) {
         let title = url.deletingPathExtension().lastPathComponent
         let artist = "未知艺术家"
         let album = "未知专辑"
@@ -149,23 +157,23 @@ class PythonScriptHelper {
                         switch commonKey {
                         case .commonKeyTitle:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(value, artist, album, nil, artwork) }
+                                await MainActor.run { completion(value, artist, album, [], artwork) }
                                 return
                             }
                         case .commonKeyArtist:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(title, value, album, nil, artwork) }
+                                await MainActor.run { completion(title, value, album, [], artwork) }
                                 return
                             }
                         case .commonKeyAlbumName:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(title, artist, value, nil, artwork) }
+                                await MainActor.run { completion(title, artist, value, [], artwork) }
                                 return
                             }
                         case .commonKeyArtwork:
                             if let data = try await item.load(.dataValue) {
                                 artwork = NSImage(data: data)
-                                await MainActor.run { completion(title, artist, album, nil, artwork) }
+                                await MainActor.run { completion(title, artist, album, [], artwork) }
                                 return
                             }
                         default:
@@ -178,7 +186,7 @@ class PythonScriptHelper {
             }
             
             // 如果没有提取到任何元数据，返回默认值
-            await MainActor.run { completion(title, artist, album, nil, nil) }
+            await MainActor.run { completion(title, artist, album, [], nil) }
         }
     }
 }
