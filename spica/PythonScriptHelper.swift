@@ -90,12 +90,13 @@ class PythonScriptHelper {
                                     lyricLines = lyricsArray.map { LyricLine(timestamp: -1, text: $0) }
                                 }
                                 
-                                var artwork: NSImage? = nil
+                                // 处理封面数据，而不是直接创建NSImage
+                                var artworkData: Data? = nil
                                 
                                 // 检查JSON中是否有封面
                                 if let artworkBase64 = json["artwork"] as? String,
-                                   let artworkData = Data(base64Encoded: artworkBase64) {
-                                    artwork = NSImage(data: artworkData)
+                                   let decodedData = Data(base64Encoded: artworkBase64) {
+                                    artworkData = decodedData
                                 } else {
                                     // 尝试从临时文件中读取封面
                                     let tempArtworkPath = NSHomeDirectory() + "/Documents/spica_temp_artwork.json"
@@ -104,8 +105,8 @@ class PythonScriptHelper {
                                             let artworkFileData = try Data(contentsOf: URL(fileURLWithPath: tempArtworkPath))
                                             if let artworkJson = try JSONSerialization.jsonObject(with: artworkFileData) as? [String: String],
                                                let artworkBase64 = artworkJson["artwork"],
-                                               let artworkData = Data(base64Encoded: artworkBase64) {
-                                                artwork = NSImage(data: artworkData)
+                                               let decodedData = Data(base64Encoded: artworkBase64) {
+                                                artworkData = decodedData
                                                 
                                                 // 删除临时文件
                                                 try? FileManager.default.removeItem(atPath: tempArtworkPath)
@@ -116,8 +117,9 @@ class PythonScriptHelper {
                                     }
                                 }
                                 
-                                // 在主线程回调结果
+                                // 在主线程创建NSImage并回调结果
                                 DispatchQueue.main.async {
+                                    let artwork = artworkData.flatMap { NSImage(data: $0) }
                                     completion(title, artist, album, lyricLines, artwork)
                                 }
                                 return
@@ -143,13 +145,16 @@ class PythonScriptHelper {
         let title = url.deletingPathExtension().lastPathComponent
         let artist = "未知艺术家"
         let album = "未知专辑"
-        var artwork: NSImage? = nil
         
         Task {
             let asset = AVURLAsset(url: url)
             do {
                 // 获取常见元数据
                 let metadata = try await asset.load(.commonMetadata)
+                var artworkData: Data? = nil
+                var finalTitle = title
+                var finalArtist = artist
+                var finalAlbum = album
                 
                 // 从元数据中提取信息
                 for item in metadata {
@@ -157,36 +162,36 @@ class PythonScriptHelper {
                         switch commonKey {
                         case .commonKeyTitle:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(value, artist, album, [], artwork) }
-                                return
+                                finalTitle = value
                             }
                         case .commonKeyArtist:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(title, value, album, [], artwork) }
-                                return
+                                finalArtist = value
                             }
                         case .commonKeyAlbumName:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(title, artist, value, [], artwork) }
-                                return
+                                finalAlbum = value
                             }
                         case .commonKeyArtwork:
-                            if let data = try await item.load(.dataValue) {
-                                artwork = NSImage(data: data)
-                                await MainActor.run { completion(title, artist, album, [], artwork) }
-                                return
-                            }
+                            artworkData = try await item.load(.dataValue)
                         default:
                             break
                         }
                     }
                 }
+                
+                // 在主线程上创建NSImage并回调所有结果
+                await MainActor.run {
+                    let artwork = artworkData.flatMap { NSImage(data: $0) }
+                    completion(finalTitle, finalArtist, finalAlbum, [], artwork)
+                }
             } catch {
                 print("AVFoundation元数据提取失败: \(error)")
+                // 如果提取失败，返回默认值
+                await MainActor.run {
+                    completion(title, artist, album, [], nil)
+                }
             }
-            
-            // 如果没有提取到任何元数据，返回默认值
-            await MainActor.run { completion(title, artist, album, [], nil) }
         }
     }
 }
