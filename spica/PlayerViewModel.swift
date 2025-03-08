@@ -31,8 +31,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     
     // 设置媒体远程控制命令
     private func setupMediaRemoteCommands() {
-        // 播放命令
-        mediaRemoteCommandCenter.playCommand.addTarget { [weak self] event in
+        mediaRemoteCommandCenter.togglePlayPauseCommand.addTarget { [weak self] event in
             guard let self = self, let currentSong = self.currentSong else {
                 return .noActionableNowPlayingItem
             }
@@ -41,17 +40,10 @@ class PlayerViewModel: NSObject, ObservableObject {
                 self.play(song: currentSong)
                 return .success
             }
-            return .commandFailed
-        }
-        
-        // 暂停命令
-        mediaRemoteCommandCenter.pauseCommand.addTarget { [weak self] event in
-            guard let self = self, self.isPlaying else {
-                return .noActionableNowPlayingItem
+            else {
+                self.pause()
+                return .success
             }
-            
-            self.pause()
-            return .success
         }
         
         // 下一曲命令
