@@ -30,60 +30,84 @@ class PlayerViewModel: NSObject, ObservableObject {
     
     // 安全添加歌曲
     func addSongs(_ urls: [URL]) {
-        urls.forEach { url in
-            guard url.startAccessingSecurityScopedResource() else {
-                errorMessage = "文件访问被拒绝: \(url.lastPathComponent)"
-                return
-            }
-            
-            securityScopedURLs.append(url)
-            
-            let asset = AVAsset(url: url)
-            let duration = CMTimeGetSeconds(asset.duration)
-            
-            // 提取元数据
-            let fileExtension = url.pathExtension.lowercased()
-            var title = url.deletingPathExtension().lastPathComponent
-            var artist = "未知艺术家"
-            var album = "未知专辑"
-            var artwork: NSImage? = nil  // 使用 NSImage
-            
-            // 获取 AVAsset 元数据
-            let metadataItems = asset.metadata
-            
-            // 从元数据中获取艺术家
-            if let artistItem = metadataItems.first(where: { $0.commonKey == .commonKeyArtist }) {
-                artist = artistItem.stringValue ?? artist
-            }
-            
-            // 从元数据中获取标题
-            if let titleItem = metadataItems.first(where: { $0.commonKey == .commonKeyTitle }) {
-                title = titleItem.stringValue ?? title
-            }
-            
-            // 从元数据中获取专辑
-            if let albumItem = metadataItems.first(where: { $0.commonKey == .commonKeyAlbumName }) {
-                album = albumItem.stringValue ?? album
-            }
-            
-            // 获取专辑封面
-            if let artworkItem = metadataItems.first(where: { $0.commonKey == .commonKeyArtwork }) {
-                if let data = artworkItem.dataValue {
-                    artwork = NSImage(data: data)  // 使用 NSImage 初始化
+        Task {
+            for url in urls {
+                guard url.startAccessingSecurityScopedResource() else {
+                    await MainActor.run {
+                        errorMessage = "文件访问被拒绝: \(url.lastPathComponent)"
+                    }
+                    continue
+                }
+                
+                await MainActor.run {
+                    securityScopedURLs.append(url)
+                }
+                
+                // 使用新的 AVURLAsset 和异步加载 API
+                let asset = AVURLAsset(url: url)
+                
+                // 加载持续时间
+                var duration: Double = 0
+                do {
+                    let durationValue = try await asset.load(.duration)
+                    duration = CMTimeGetSeconds(durationValue)
+                    if duration.isNaN { duration = 0 }
+                } catch {
+                    print("无法加载持续时间：\(error.localizedDescription)")
+                }
+                
+                // 提取元数据
+                var title = url.deletingPathExtension().lastPathComponent
+                var artist = "未知艺术家"
+                var album = "未知专辑"
+                var artwork: NSImage? = nil
+                
+                do {
+                    // 加载元数据
+                    let metadataItems = try await asset.load(.metadata)
+                    
+                    // 从元数据中获取艺术家
+                    if let artistItem = metadataItems.first(where: { $0.commonKey == .commonKeyArtist }) {
+                        let artistString = try await artistItem.load(.stringValue)
+                        artist = artistString ?? artist
+                    }
+                    
+                    // 从元数据中获取标题
+                    if let titleItem = metadataItems.first(where: { $0.commonKey == .commonKeyTitle }) {
+                        let titleString = try await titleItem.load(.stringValue)
+                        title = titleString ?? title
+                    }
+                    
+                    // 从元数据中获取专辑
+                    if let albumItem = metadataItems.first(where: { $0.commonKey == .commonKeyAlbumName }) {
+                        let albumString = try await albumItem.load(.stringValue)
+                        album = albumString ?? album
+                    }
+                    
+                    // 获取专辑封面
+                    if let artworkItem = metadataItems.first(where: { $0.commonKey == .commonKeyArtwork }) {
+                        if let data = try await artworkItem.load(.dataValue) {
+                            artwork = NSImage(data: data)
+                        }
+                    }
+                } catch {
+                    print("无法加载元数据：\(error.localizedDescription)")
+                }
+                
+                let newSong = SecureSong(
+                    title: title,
+                    artist: artist,
+                    album: album,
+                    duration: duration,
+                    fileURL: url,
+                    artwork: artwork,
+                    securityScoped: true
+                )
+                
+                await MainActor.run {
+                    playlist.append(newSong)
                 }
             }
-            
-            let newSong = SecureSong(
-                title: title,
-                artist: artist,
-                album: album,
-                duration: duration.isNaN ? 0 : duration,
-                fileURL: url,
-                artwork: artwork,
-                securityScoped: true
-            )
-            
-            playlist.append(newSong)
         }
     }
     
