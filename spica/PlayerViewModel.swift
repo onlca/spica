@@ -30,10 +30,8 @@ class PlayerViewModel: NSObject, ObservableObject {
                     securityScopedURLs.append(url)
                 }
                 
-                // 使用新的 AVURLAsset 和异步加载 API
+                // 获取持续时间
                 let asset = AVURLAsset(url: url)
-                
-                // 加载持续时间
                 var duration: Double = 0
                 do {
                     let durationValue = try await asset.load(.duration)
@@ -43,56 +41,32 @@ class PlayerViewModel: NSObject, ObservableObject {
                     print("无法加载持续时间：\(error.localizedDescription)")
                 }
                 
-                // 提取元数据
-                var title = url.deletingPathExtension().lastPathComponent
-                var artist = "未知艺术家"
-                var album = "未知专辑"
-                var artwork: NSImage? = nil
+                // 使用 Python 脚本解析标签
+                let pythonHelper = PythonScriptHelper.shared
                 
-                do {
-                    // 加载元数据
-                    let metadataItems = try await asset.load(.metadata)
-                    
-                    // 从元数据中获取艺术家
-                    if let artistItem = metadataItems.first(where: { $0.commonKey == .commonKeyArtist }) {
-                        let artistString = try await artistItem.load(.stringValue)
-                        artist = artistString ?? artist
-                    }
-                    
-                    // 从元数据中获取标题
-                    if let titleItem = metadataItems.first(where: { $0.commonKey == .commonKeyTitle }) {
-                        let titleString = try await titleItem.load(.stringValue)
-                        title = titleString ?? title
-                    }
-                    
-                    // 从元数据中获取专辑
-                    if let albumItem = metadataItems.first(where: { $0.commonKey == .commonKeyAlbumName }) {
-                        let albumString = try await albumItem.load(.stringValue)
-                        album = albumString ?? album
-                    }
-                    
-                    // 获取专辑封面
-                    if let artworkItem = metadataItems.first(where: { $0.commonKey == .commonKeyArtwork }) {
-                        if let data = try await artworkItem.load(.dataValue) {
-                            artwork = NSImage(data: data)
+                // 创建任务组以等待异步完成
+                await withCheckedContinuation { continuation in
+                    pythonHelper.runTagParser(for: url) { title, artist, album, artwork in
+                        let finalTitle = title ?? url.deletingPathExtension().lastPathComponent
+                        let finalArtist = artist ?? "未知艺术家"
+                        let finalAlbum = album ?? "未知专辑"
+                        
+                        let newSong = SecureSong(
+                            title: finalTitle,
+                            artist: finalArtist,
+                            album: finalAlbum,
+                            duration: duration,
+                            fileURL: url,
+                            artwork: artwork,
+                            securityScoped: true
+                        )
+                        
+                        Task { @MainActor in
+                            self.playlist.append(newSong)
                         }
+                        
+                        continuation.resume()
                     }
-                } catch {
-                    print("无法加载元数据：\(error.localizedDescription)")
-                }
-                
-                let newSong = SecureSong(
-                    title: title,
-                    artist: artist,
-                    album: album,
-                    duration: duration,
-                    fileURL: url,
-                    artwork: artwork,
-                    securityScoped: true
-                )
-                
-                await MainActor.run {
-                    playlist.append(newSong)
                 }
             }
         }
