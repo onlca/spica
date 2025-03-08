@@ -36,10 +36,3 @@ struct LyricsDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-
-struct LyricsDetailView_Previews: PreviewProvider {
-    static var previews: some View {
-        let vm = PlayerViewModel()
-        return LyricsDetailView(viewModel: vm)
-    }
-}

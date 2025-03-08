@@ -10,7 +10,6 @@ class PythonScriptHelper {
     func runTagParser(for url: URL, completion: @escaping (String?, String?, String?, [LyricLine]?, NSImage?) -> Void) {
         // 确保Python脚本存在
         guard let scriptURL = Bundle.main.url(forResource: "TagParser", withExtension: "py") else {
-            print("错误: 找不到TagParser.py脚本")
             fallbackToAVFoundation(url: url, completion: completion)
             return
         }
@@ -27,11 +26,7 @@ class PythonScriptHelper {
             
             // 设置Python路径和参数
             task.executableURL = URL(fileURLWithPath: "/opt/anaconda3/bin/python3")
-            
-            // 脚本路径参数
-            let scriptPath = scriptURL.path
-            let filePath = url.path
-            task.arguments = [scriptPath, filePath]
+            task.arguments = [scriptURL.path, url.path]
             
             // 设置管道
             let outputPipe = Pipe()
@@ -40,101 +35,69 @@ class PythonScriptHelper {
             task.standardError = errorPipe
             
             do {
-                // 启动进程
+                // 启动进程并等待完成
                 try task.run()
-                
-                // 同步等待进程完成
                 task.waitUntilExit()
                 
-                // 捕获错误输出
-                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                if let errorOutput = String(data: errorData, encoding: .utf8), !errorOutput.isEmpty {
-                    print("Python脚本错误: \(errorOutput)")
-                }
-                
-                // 捕获标准输出
+                // 获取输出数据
                 let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
                 
-                if let output = String(data: outputData, encoding: .utf8), !output.isEmpty {
-                    print("Python脚本原始输出: \(output)")
+                if let output = String(data: outputData, encoding: .utf8),
+                   !output.isEmpty,
+                   let jsonLine = output.components(separatedBy: .newlines).first(where: { $0.starts(with: "{") }),
+                   let jsonData = jsonLine.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] {
                     
-                    // 处理输出中可能的多行JSON问题
-                    if let jsonLine = output.components(separatedBy: .newlines).first(where: { $0.starts(with: "{") }) {
-                        print("提取的JSON: \(jsonLine)")
-                        
-                        do {
-                            if let jsonData = jsonLine.data(using: .utf8),
-                               let json = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] {
-                                
-                                // 检查是否有错误
-                                if let error = json["error"] as? String {
-                                    print("处理标签时出错: \(error)")
-                                }
-                                
-                                // 解析返回的标签数据
-                                let title = json["title"] as? String
-                                let artist = json["artist"] as? String
-                                let album = json["album"] as? String
-                                
-                                // 解析歌词数据
-                                var lyricLines: [LyricLine] = []
-                                if let lyricsArray = json["lyrics"] as? [[String: Any]] {
-                                    for item in lyricsArray {
-                                        if let text = item["text"] as? String {
-                                            let time = item["time"] as? Double ?? -1
-                                            lyricLines.append(LyricLine(timestamp: time, text: text))
-                                        }
-                                    }
-                                } else if let lyricsArray = json["lyrics"] as? [String] {
-                                    // 兼容无时间戳的纯文本歌词
-                                    lyricLines = lyricsArray.map { LyricLine(timestamp: -1, text: $0) }
-                                }
-                                
-                                // 处理封面数据，而不是直接创建NSImage
-                                var artworkData: Data? = nil
-                                
-                                // 检查JSON中是否有封面
-                                if let artworkBase64 = json["artwork"] as? String,
-                                   let decodedData = Data(base64Encoded: artworkBase64) {
-                                    artworkData = decodedData
-                                } else {
-                                    // 尝试从临时文件中读取封面
-                                    let tempArtworkPath = NSHomeDirectory() + "/Documents/spica_temp_artwork.json"
-                                    if FileManager.default.fileExists(atPath: tempArtworkPath) {
-                                        do {
-                                            let artworkFileData = try Data(contentsOf: URL(fileURLWithPath: tempArtworkPath))
-                                            if let artworkJson = try JSONSerialization.jsonObject(with: artworkFileData) as? [String: String],
-                                               let artworkBase64 = artworkJson["artwork"],
-                                               let decodedData = Data(base64Encoded: artworkBase64) {
-                                                artworkData = decodedData
-                                                
-                                                // 删除临时文件
-                                                try? FileManager.default.removeItem(atPath: tempArtworkPath)
-                                            }
-                                        } catch {
-                                            print("读取临时封面文件失败: \(error)")
-                                        }
-                                    }
-                                }
-                                
-                                // 在主线程创建NSImage并回调结果
-                                DispatchQueue.main.async {
-                                    let artwork = artworkData.flatMap { NSImage(data: $0) }
-                                    completion(title, artist, album, lyricLines, artwork)
-                                }
-                                return
+                    // 解析返回的标签数据
+                    let title = json["title"] as? String
+                    let artist = json["artist"] as? String
+                    let album = json["album"] as? String
+                    
+                    // 解析歌词数据
+                    var lyricLines: [LyricLine] = []
+                    if let lyricsArray = json["lyrics"] as? [[String: Any]] {
+                        for item in lyricsArray {
+                            if let text = item["text"] as? String {
+                                let time = item["time"] as? Double ?? -1
+                                lyricLines.append(LyricLine(timestamp: time, text: text))
                             }
-                        } catch {
-                            print("解析JSON失败: \(error)")
+                        }
+                    } else if let lyricsArray = json["lyrics"] as? [String] {
+                        // 兼容无时间戳的纯文本歌词
+                        lyricLines = lyricsArray.map { LyricLine(timestamp: -1, text: $0) }
+                    }
+                    
+                    // 处理封面数据
+                    var artworkData: Data? = nil
+                    
+                    // 检查JSON中是否有封面
+                    if let artworkBase64 = json["artwork"] as? String,
+                       let decodedData = Data(base64Encoded: artworkBase64) {
+                        artworkData = decodedData
+                    } else {
+                        // 尝试从临时文件中读取封面
+                        let tempArtworkPath = NSHomeDirectory() + "/Documents/spica_temp_artwork.json"
+                        if FileManager.default.fileExists(atPath: tempArtworkPath) {
+                            if let artworkFileData = try? Data(contentsOf: URL(fileURLWithPath: tempArtworkPath)),
+                               let artworkJson = try? JSONSerialization.jsonObject(with: artworkFileData) as? [String: String],
+                               let artworkBase64 = artworkJson["artwork"],
+                               let decodedData = Data(base64Encoded: artworkBase64) {
+                                artworkData = decodedData
+                                try? FileManager.default.removeItem(atPath: tempArtworkPath)
+                            }
                         }
                     }
+                    
+                    // 在主线程创建NSImage并回调结果
+                    DispatchQueue.main.async {
+                        let artwork = artworkData.flatMap { NSImage(data: $0) }
+                        completion(title, artist, album, lyricLines, artwork)
+                    }
+                } else {
+                    // 如果没有有效的JSON输出，使用AVFoundation
+                    self.fallbackToAVFoundation(url: url, completion: completion)
                 }
-                
-                // 如果没有有效的JSON输出，使用AVFoundation
-                self.fallbackToAVFoundation(url: url, completion: completion)
-                
             } catch {
-                print("运行Python脚本失败: \(error.localizedDescription)")
                 self.fallbackToAVFoundation(url: url, completion: completion)
             }
         }
@@ -180,19 +143,18 @@ class PythonScriptHelper {
                     }
                 }
                 
-                // 创建不可变的本地副本，解决sendability问题
+                // 创建不可变的本地副本
                 let immutableArtworkData = artworkData
                 let immutableTitle = finalTitle
                 let immutableArtist = finalArtist
                 let immutableAlbum = finalAlbum
                 
-                // 在主线程上创建NSImage并回调所有结果
+                // 在主线程上创建NSImage并回调结果
                 await MainActor.run {
                     let artwork = immutableArtworkData.flatMap { NSImage(data: $0) }
                     completion(immutableTitle, immutableArtist, immutableAlbum, [], artwork)
                 }
             } catch {
-                print("AVFoundation元数据提取失败: \(error)")
                 // 如果提取失败，返回默认值
                 let immutableTitle = title
                 let immutableArtist = artist

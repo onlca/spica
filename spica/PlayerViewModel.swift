@@ -91,7 +91,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     }
     
     // 更新正在播放信息
-    private func updateNowPlayingInfo() {
+    public func updateNowPlayingInfo() {
         guard let song = currentSong else {
             nowPlayingInfoCenter.nowPlayingInfo = nil
             return
@@ -146,7 +146,7 @@ class PlayerViewModel: NSObject, ObservableObject {
                     duration = CMTimeGetSeconds(durationValue)
                     if duration.isNaN { duration = 0 }
                 } catch {
-                    print("无法加载持续时间：\(error.localizedDescription)")
+                    duration = 0
                 }
                 
                 // 使用 Python 脚本解析标签

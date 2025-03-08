@@ -44,19 +44,3 @@ struct AlbumArtView: View {
         }
     }
 }
-
-// 预览提供者
-struct AlbumArtView_Previews: PreviewProvider {
-    static var previews: some View {
-        AlbumArtView(song: SecureSong(
-            title: "预览歌曲",
-            artist: "预览艺术家",
-            album: "预览专辑",
-            duration: 180,
-            fileURL: URL(string: "file://example")!,
-            artwork: nil
-        ))
-        .padding()
-        .frame(width: 300)
-    }
-}

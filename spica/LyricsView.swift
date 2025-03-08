@@ -128,20 +128,3 @@ struct LyricsView: View {
         }
     }
 }
-
-struct LyricsView_Previews: PreviewProvider {
-    static var previews: some View {
-        let vm = PlayerViewModel()
-        
-        // 创建一些测试数据
-        let sampleLyrics = [
-            LyricLine(timestamp: 0.0, text: "这是第一行歌词"),
-            LyricLine(timestamp: 5.0, text: "这是第二行歌词"),
-            LyricLine(timestamp: 10.0, text: "这是第三行歌词"),
-            LyricLine(timestamp: 15.0, text: "这是第四行歌词")
-        ]
-        
-        return LyricsView(lyrics: sampleLyrics, viewModel: vm)
-            .frame(width: 300, height: 200)
-    }
-}
