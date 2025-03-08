@@ -7,7 +7,7 @@ class PythonScriptHelper {
     
     private init() {}
     
-    func runTagParser(for url: URL, completion: @escaping (String?, String?, String?, NSImage?) -> Void) {
+    func runTagParser(for url: URL, completion: @escaping (String?, String?, String?, [String]?, NSImage?) -> Void) {
         // 确保Python脚本存在
         guard let scriptURL = Bundle.main.url(forResource: "TagParser", withExtension: "py") else {
             print("错误: 找不到TagParser.py脚本")
@@ -76,6 +76,12 @@ class PythonScriptHelper {
                                 let artist = json["artist"] as? String
                                 let album = json["album"] as? String
                                 
+                                // 解析歌词数据
+                                var lyrics: [String]? = nil
+                                if let lyricsArray = json["lyrics"] as? [String] {
+                                    lyrics = lyricsArray
+                                }
+                                
                                 var artwork: NSImage? = nil
                                 
                                 // 检查JSON中是否有封面
@@ -104,7 +110,7 @@ class PythonScriptHelper {
                                 
                                 // 在主线程回调结果
                                 DispatchQueue.main.async {
-                                    completion(title, artist, album, artwork)
+                                    completion(title, artist, album, lyrics, artwork)
                                 }
                                 return
                             }
@@ -125,7 +131,7 @@ class PythonScriptHelper {
     }
     
     // 使用AVFoundation作为备用方案
-    private func fallbackToAVFoundation(url: URL, completion: @escaping (String?, String?, String?, NSImage?) -> Void) {
+    private func fallbackToAVFoundation(url: URL, completion: @escaping (String?, String?, String?, [String]?, NSImage?) -> Void) {
         let title = url.deletingPathExtension().lastPathComponent
         let artist = "未知艺术家"
         let album = "未知专辑"
@@ -143,23 +149,23 @@ class PythonScriptHelper {
                         switch commonKey {
                         case .commonKeyTitle:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(value, artist, album, artwork) }
+                                await MainActor.run { completion(value, artist, album, nil, artwork) }
                                 return
                             }
                         case .commonKeyArtist:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(title, value, album, artwork) }
+                                await MainActor.run { completion(title, value, album, nil, artwork) }
                                 return
                             }
                         case .commonKeyAlbumName:
                             if let value = try await item.load(.stringValue) {
-                                await MainActor.run { completion(title, artist, value, artwork) }
+                                await MainActor.run { completion(title, artist, value, nil, artwork) }
                                 return
                             }
                         case .commonKeyArtwork:
                             if let data = try await item.load(.dataValue) {
                                 artwork = NSImage(data: data)
-                                await MainActor.run { completion(title, artist, album, artwork) }
+                                await MainActor.run { completion(title, artist, album, nil, artwork) }
                                 return
                             }
                         default:
@@ -172,7 +178,7 @@ class PythonScriptHelper {
             }
             
             // 如果没有提取到任何元数据，返回默认值
-            await MainActor.run { completion(title, artist, album, nil) }
+            await MainActor.run { completion(title, artist, album, nil, nil) }
         }
     }
 }

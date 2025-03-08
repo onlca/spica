@@ -11,6 +11,6 @@ struct SecureSong: Identifiable {
     let duration: Double
     let fileURL: URL
     let artwork: NSImage?
-    var lyrics: [String] = []
+    var lyrics: [String] = []  // 保存歌词行
     var securityScoped: Bool = false
 }

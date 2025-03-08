@@ -46,10 +46,11 @@ class PlayerViewModel: NSObject, ObservableObject {
                 
                 // 创建任务组以等待异步完成
                 await withCheckedContinuation { continuation in
-                    pythonHelper.runTagParser(for: url) { title, artist, album, artwork in
+                    pythonHelper.runTagParser(for: url) { title, artist, album, lyrics, artwork in
                         let finalTitle = title ?? url.deletingPathExtension().lastPathComponent
                         let finalArtist = artist ?? "未知艺术家"
                         let finalAlbum = album ?? "未知专辑"
+                        let finalLyrics = lyrics ?? []
                         
                         let newSong = SecureSong(
                             title: finalTitle,
@@ -58,6 +59,7 @@ class PlayerViewModel: NSObject, ObservableObject {
                             duration: duration,
                             fileURL: url,
                             artwork: artwork,
+                            lyrics: finalLyrics,
                             securityScoped: true
                         )
                         

@@ -60,7 +60,8 @@ def get_tags(file_path):
             "title": file_name,
             "artist": "未知艺术家",
             "album": "未知专辑",
-            "artwork": None
+            "artwork": None,
+            "lyrics": [] # 添加歌词字段，使用数组保存每行歌词
         }
         
         # 如果无法加载文件
@@ -92,7 +93,7 @@ def get_tags(file_path):
                 result["album"] = str(audio["TALB"])
                 log(f"提取到专辑: {result['album']}")
                 
-            # 读取封面 - 处理大图像
+            # 读取封面
             try:
                 if audio.get("APIC:"):
                     image_data = audio["APIC:"].data
@@ -102,6 +103,21 @@ def get_tags(file_path):
                     result["artwork"] = base64.b64encode(image_data).decode('utf-8')
             except Exception as e:
                 log(f"处理封面时出错: {e}")
+            
+            # 读取歌词 (USLT标签)
+            try:
+                for key in audio.keys():
+                    if key.startswith("USLT"):
+                        log(f"找到歌词标签: {key}")
+                        lyrics_text = str(audio[key])
+                        
+                        # 拆分歌词行
+                        lyrics_lines = lyrics_text.split('\n')
+                        result["lyrics"] = lyrics_lines
+                        log(f"提取到歌词行数: {len(lyrics_lines)}")
+                        break
+            except Exception as e:
+                log(f"处理歌词时出错: {e}")
         
         # 处理FLAC文件
         elif isinstance(audio, FLAC):
@@ -121,7 +137,14 @@ def get_tags(file_path):
                 result["album"] = audio["ALBUM"][0]
                 log(f"提取到专辑: {result['album']}")
                 
-            # 读取封面 - 限制大小
+            # 读取歌词 (LYRICS标签)
+            if "LYRICS" in audio:
+                lyrics_text = audio["LYRICS"][0]
+                lyrics_lines = lyrics_text.split('\n')
+                result["lyrics"] = lyrics_lines
+                log(f"提取到歌词行数: {len(lyrics_lines)}")
+            
+            # 读取封面
             try:
                 if hasattr(audio, "pictures") and audio.pictures:
                     log(f"FLAC图片数量: {len(audio.pictures)}")
@@ -130,7 +153,7 @@ def get_tags(file_path):
             except Exception as e:
                 log(f"处理FLAC封面时出错: {e}")
         
-        # 通用方法处理其他格式 
+        # 通用方法处理其他格式
         else:
             log(f"使用通用方法处理格式: {type(audio).__name__}")
             tags = audio
@@ -159,43 +182,37 @@ def get_tags(file_path):
                 if "album" in tags:
                     result["album"] = str(tags["album"][0])
                     log(f"提取到专辑: {result['album']}")
+                if "lyrics" in tags:
+                    lyrics_text = str(tags["lyrics"][0])
+                    lyrics_lines = lyrics_text.split('\n')
+                    result["lyrics"] = lyrics_lines
+                    log(f"提取到歌词行数: {len(lyrics_lines)}")
             except Exception as e:
                 log(f"提取通用标签失败: {e}")
         
-        # 输出JSON结果 - 分块处理大型输出
+        # 输出结果 - 不包括大图片数据
         log("生成JSON输出...")
-        json_result = json.dumps(result)
-        log(f"JSON输出长度: {len(json_result)} 字符")
         
-        # 分段输出大型JSON，以避免缓冲区问题
-        try:
-            # 对于标题、艺术家和专辑信息单独输出
-            metadata_only = {
-                "title": result["title"],
-                "artist": result["artist"],
-                "album": result["album"]
-            }
+        # 拆分结果，先输出不包含封面的部分
+        metadata_result = {
+            "title": result["title"],
+            "artist": result["artist"],
+            "album": result["album"],
+            "lyrics": result["lyrics"]
+        }
+        
+        print(json.dumps(metadata_result))
+        sys.stdout.flush()
+        log("已输出基本元数据")
+        
+        # 如果有封面，处理封面数据
+        if result["artwork"]:
+            # 写入到临时文件中
+            temp_artwork_path = os.path.expanduser("~/Documents/spica_temp_artwork.json")
+            with open(temp_artwork_path, "w") as f:
+                json.dump({"artwork": result["artwork"]}, f)
             
-            # 输出元数据部分
-            print(json.dumps(metadata_only))
-            sys.stdout.flush()
-            log("已输出基本元数据")
-            
-            # 如果有封面，再单独写入
-            if result["artwork"]:
-                # 写入到临时文件中
-                temp_artwork_path = os.path.expanduser("~/Documents/spica_temp_artwork.json")
-                with open(temp_artwork_path, "w") as f:
-                    json.dump({"artwork": result["artwork"]}, f)
-                
-                log(f"封面数据已写入临时文件: {temp_artwork_path}")
-            
-        except Exception as e:
-            log(f"输出JSON时出错: {e}")
-            # 如果出错，尝试输出不含封面的JSON
-            no_artwork = {k: v for k, v in result.items() if k != "artwork"}
-            print(json.dumps(no_artwork))
-            sys.stdout.flush()
+            log(f"封面数据已写入临时文件: {temp_artwork_path}")
         
     except Exception as e:
         # 记录详细错误
@@ -210,6 +227,7 @@ def get_tags(file_path):
             "title": file_name,
             "artist": "未知艺术家",
             "album": "未知专辑",
+            "lyrics": []
         }
         print(json.dumps(error_result))
         sys.stdout.flush()
