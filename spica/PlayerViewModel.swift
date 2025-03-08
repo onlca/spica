@@ -2,6 +2,7 @@ import SwiftUI
 import AVKit
 import Combine
 import AppKit
+import MediaPlayer
 
 class PlayerViewModel: NSObject, ObservableObject {
     @Published var currentSong: SecureSong?
@@ -14,6 +15,121 @@ class PlayerViewModel: NSObject, ObservableObject {
     private var timeObserver: Any?
     private var securityScopedURLs = [URL]()
     private var playerItemObservation: NSKeyValueObservation?
+    private var mediaRemoteCommandCenter: MPRemoteCommandCenter
+    private var nowPlayingInfoCenter: MPNowPlayingInfoCenter
+    
+    override init() {
+        // 初始化媒体控制中心
+        mediaRemoteCommandCenter = MPRemoteCommandCenter.shared()
+        nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
+        
+        super.init()
+        
+        // 设置媒体控制命令
+        setupMediaRemoteCommands()
+    }
+    
+    // 设置媒体远程控制命令
+    private func setupMediaRemoteCommands() {
+        // 播放命令
+        mediaRemoteCommandCenter.playCommand.addTarget { [weak self] event in
+            guard let self = self, let currentSong = self.currentSong else {
+                return .noActionableNowPlayingItem
+            }
+            
+            if !self.isPlaying {
+                self.play(song: currentSong)
+                return .success
+            }
+            return .commandFailed
+        }
+        
+        // 暂停命令
+        mediaRemoteCommandCenter.pauseCommand.addTarget { [weak self] event in
+            guard let self = self, self.isPlaying else {
+                return .noActionableNowPlayingItem
+            }
+            
+            self.pause()
+            return .success
+        }
+        
+        // 下一曲命令
+        mediaRemoteCommandCenter.nextTrackCommand.addTarget { [weak self] event in
+            guard let self = self,
+                  let currentSong = self.currentSong,
+                  let currentIndex = self.playlist.firstIndex(where: { $0.id == currentSong.id }),
+                  !self.playlist.isEmpty else {
+                return .noActionableNowPlayingItem
+            }
+            
+            let nextIndex = (currentIndex + 1) % self.playlist.count
+            let nextSong = self.playlist[nextIndex]
+            self.play(song: nextSong)
+            return .success
+        }
+        
+        // 上一曲命令
+        mediaRemoteCommandCenter.previousTrackCommand.addTarget { [weak self] event in
+            guard let self = self,
+                  let currentSong = self.currentSong,
+                  let currentIndex = self.playlist.firstIndex(where: { $0.id == currentSong.id }),
+                  !self.playlist.isEmpty else {
+                return .noActionableNowPlayingItem
+            }
+            
+            let previousIndex = (currentIndex - 1 + self.playlist.count) % self.playlist.count
+            let previousSong = self.playlist[previousIndex]
+            self.play(song: previousSong)
+            return .success
+        }
+        
+        // 跳转命令
+        mediaRemoteCommandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let self = self,
+                  let player = self.audioPlayer,
+                  let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+            
+            let time = CMTime(seconds: positionEvent.positionTime, preferredTimescale: 600)
+            player.seek(to: time)
+            return .success
+        }
+    }
+    
+    // 更新正在播放信息
+    private func updateNowPlayingInfo() {
+        guard let song = currentSong else {
+            nowPlayingInfoCenter.nowPlayingInfo = nil
+            return
+        }
+        
+        var nowPlayingInfo = [String: Any]()
+        
+        // 基本信息
+        nowPlayingInfo[MPMediaItemPropertyTitle] = song.title
+        nowPlayingInfo[MPMediaItemPropertyArtist] = song.artist
+        nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = song.album
+        
+        // 设置专辑封面
+        if let artwork = song.artwork {
+            let albumArt = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { size in
+                return artwork
+            }
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = albumArt
+        }
+        
+        // 播放进度相关信息
+        if let player = audioPlayer {
+            nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player.currentTime().seconds
+            nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = song.duration
+            nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = player.rate
+        }
+        
+        // 更新信息
+        nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo
+    }
     
     // 安全添加歌曲
     func addSongs(_ urls: [URL]) {
@@ -80,6 +196,7 @@ class PlayerViewModel: NSObject, ObservableObject {
         if let currentSong = currentSong, currentSong.id == song.id {
             audioPlayer?.play()
             isPlaying = true
+            updateNowPlayingInfo()
             return
         }
         
@@ -109,11 +226,20 @@ class PlayerViewModel: NSObject, ObservableObject {
         currentSong = song
         audioPlayer?.play()
         isPlaying = true
+        
+        // 更新媒体控制信息
+        updateNowPlayingInfo()
     }
     
     func pause() {
         audioPlayer?.pause()
         isPlaying = false
+        
+        // 更新媒体控制信息
+        if var nowPlayingInfo = nowPlayingInfoCenter.nowPlayingInfo {
+            nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = 0
+            nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo
+        }
     }
     
     // 清理当前播放资源
@@ -159,9 +285,15 @@ class PlayerViewModel: NSObject, ObservableObject {
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
-            guard let self, let duration = self.audioPlayer?.currentItem?.duration else { return }
+            guard let self = self, let duration = self.audioPlayer?.currentItem?.duration else { return }
             if !duration.seconds.isNaN && duration.seconds > 0 {
                 self.progress = time.seconds / duration.seconds
+                
+                // 更新媒体控制中的播放进度
+                if var nowPlayingInfo = self.nowPlayingInfoCenter.nowPlayingInfo {
+                    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = time.seconds
+                    self.nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo
+                }
             } else {
                 self.progress = 0
             }
@@ -173,6 +305,9 @@ class PlayerViewModel: NSObject, ObservableObject {
         audioPlayer?.seek(to: .zero)
         isPlaying = false
         progress = 0
+        
+        // 清除媒体控制信息
+        nowPlayingInfoCenter.nowPlayingInfo = nil
     }
     
     // 释放资源
@@ -204,5 +339,12 @@ class PlayerViewModel: NSObject, ObservableObject {
     deinit {
         cleanupCurrentPlayback()
         releaseSecurityScopedResources()
+        
+        // 清除媒体控制命令
+        mediaRemoteCommandCenter.playCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.pauseCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.nextTrackCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.previousTrackCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.changePlaybackPositionCommand.removeTarget(nil)
     }
 }
