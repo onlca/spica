@@ -51,6 +51,7 @@ struct LyricsView: View {
                 updateCurrentLyric()
             }
         }
+        .listStyle(.sidebar)
         .background(Color(.textBackgroundColor).opacity(0.2))
         .cornerRadius(8)
         // 监听播放进度变化，更新当前歌词 - 使用新的onChange API
