@@ -380,41 +380,44 @@ class PlayerViewModel: NSObject, ObservableObject {
                     // 获取音频格式描述
                     let formatDescriptions = try await audioTrack.load(.formatDescriptions)
                     
-                    // 临时存储获取的值
-                    var tempSampleRate: Double = 0
-                    var tempChannels: Int = 0
+                    // 从格式描述中获取信息
+                    var sampleRate: Double = 0
+                    var channels: Int = 0
                     
                     if let formatDescription = formatDescriptions.first {
                         // 获取采样率
-                        if let sampleRate = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee.mSampleRate {
-                            tempSampleRate = sampleRate
+                        if let sr = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee.mSampleRate {
+                            sampleRate = sr
                         }
                         
                         // 获取声道数
-                        if let channelsPerFrame = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee.mChannelsPerFrame {
-                            tempChannels = Int(channelsPerFrame)
+                        if let ch = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee.mChannelsPerFrame {
+                            channels = Int(ch)
                         }
                     }
                     
                     // 估算比特率
                     let duration = try await asset.load(.duration)
                     let durationInSeconds = CMTimeGetSeconds(duration)
-                    var tempBitrate: Int = 0
                     
-                    if durationInSeconds > 0 {
-                        var fileSize: Int64 = 0
-                        // 在主线程获取当前的文件大小
-                        await MainActor.run {
-                            fileSize = self.audioInfo.fileSize
-                        }
-                        tempBitrate = Int(Double(fileSize) * 8.0 / durationInSeconds / 1000.0)
+                    // 获取文件大小 - 在主线程获取并立即保存本地副本
+                    let fileSize = await MainActor.run {
+                        return self.audioInfo.fileSize
                     }
                     
-                    // 所有属性更新都在主线程进行
-                    await MainActor.run {
-                        self.audioInfo.sampleRate = tempSampleRate
-                        self.audioInfo.channels = tempChannels
-                        self.audioInfo.bitrate = tempBitrate
+                    // 使用本地变量计算比特率
+                    let bitrate: Int
+                    if durationInSeconds > 0 {
+                        bitrate = Int(Double(fileSize) * 8.0 / durationInSeconds / 1000.0)
+                    } else {
+                        bitrate = 0
+                    }
+                    
+                    // 一次性在主线程更新所有值，避免多次引用捕获的变量
+                    await MainActor.run { [sampleRate, channels] in
+                        self.audioInfo.sampleRate = sampleRate
+                        self.audioInfo.channels = channels
+                        self.audioInfo.bitrate = bitrate
                     }
                 }
             } catch {
@@ -428,8 +431,7 @@ class PlayerViewModel: NSObject, ObservableObject {
         releaseSecurityScopedResources()
         
         // 清除媒体控制命令
-        mediaRemoteCommandCenter.playCommand.removeTarget(nil)
-        mediaRemoteCommandCenter.pauseCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.togglePlayPauseCommand.removeTarget(nil)
         mediaRemoteCommandCenter.nextTrackCommand.removeTarget(nil)
         mediaRemoteCommandCenter.previousTrackCommand.removeTarget(nil)
         mediaRemoteCommandCenter.changePlaybackPositionCommand.removeTarget(nil)
