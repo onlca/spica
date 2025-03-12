@@ -10,6 +10,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     @Published var progress: Double = 0
     @Published var playlist: [SecureSong] = []
     @Published var errorMessage: String?
+    @Published var audioInfo: AudioInfo = AudioInfo()
     
     public var audioPlayer: AVPlayer?
     private var timeObserver: Any?
@@ -17,6 +18,18 @@ class PlayerViewModel: NSObject, ObservableObject {
     private var playerItemObservation: NSKeyValueObservation?
     private var mediaRemoteCommandCenter: MPRemoteCommandCenter
     private var nowPlayingInfoCenter: MPNowPlayingInfoCenter
+    
+    // 音频格式信息结构体
+    struct AudioInfo {
+        var bitrate: Int = 0
+        var sampleRate: Double = 0
+        var fileFormat: String = ""
+        var channels: Int = 0
+        var fileSize: Int64 = 0
+        var formattedFileSize: String {
+            ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)
+        }
+    }
     
     override init() {
         // 初始化媒体控制中心
@@ -204,6 +217,9 @@ class PlayerViewModel: NSObject, ObservableObject {
         let playerItem = AVPlayerItem(url: song.fileURL)
         audioPlayer = AVPlayer(playerItem: playerItem)
         
+        // 获取并更新音频格式信息
+        extractAudioInfo(from: song.fileURL)
+        
         // 设置观察者
         setupPlayerObservers()
         
@@ -325,6 +341,85 @@ class PlayerViewModel: NSObject, ObservableObject {
             
             // 从播放列表中移除
             playlist.remove(at: index)
+        }
+    }
+    
+    // 提取音频格式信息
+    private func extractAudioInfo(from url: URL) {
+        // 重置音频信息 - 在主线程上操作
+        DispatchQueue.main.async {
+            self.audioInfo = AudioInfo()
+        }
+        
+        // 获取文件大小
+        do {
+            let resourceValues = try url.resourceValues(forKeys: [.fileSizeKey])
+            if let fileSize = resourceValues.fileSize {
+                let fileSizeValue = Int64(fileSize)
+                // 确保在主线程更新
+                DispatchQueue.main.async {
+                    self.audioInfo.fileSize = fileSizeValue
+                }
+            }
+        } catch {
+            print("无法获取文件大小: \(error)")
+        }
+        
+        // 提取音频格式信息
+        let asset = AVURLAsset(url: url)
+        
+        // 获取文件格式 - 确保在主线程更新
+        let fileFormat = url.pathExtension.uppercased()
+        DispatchQueue.main.async {
+            self.audioInfo.fileFormat = fileFormat
+        }
+        
+        Task {
+            do {
+                if let audioTrack = try await asset.loadTracks(withMediaType: .audio).first {
+                    // 获取音频格式描述
+                    let formatDescriptions = try await audioTrack.load(.formatDescriptions)
+                    
+                    // 临时存储获取的值
+                    var tempSampleRate: Double = 0
+                    var tempChannels: Int = 0
+                    
+                    if let formatDescription = formatDescriptions.first {
+                        // 获取采样率
+                        if let sampleRate = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee.mSampleRate {
+                            tempSampleRate = sampleRate
+                        }
+                        
+                        // 获取声道数
+                        if let channelsPerFrame = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee.mChannelsPerFrame {
+                            tempChannels = Int(channelsPerFrame)
+                        }
+                    }
+                    
+                    // 估算比特率
+                    let duration = try await asset.load(.duration)
+                    let durationInSeconds = CMTimeGetSeconds(duration)
+                    var tempBitrate: Int = 0
+                    
+                    if durationInSeconds > 0 {
+                        var fileSize: Int64 = 0
+                        // 在主线程获取当前的文件大小
+                        await MainActor.run {
+                            fileSize = self.audioInfo.fileSize
+                        }
+                        tempBitrate = Int(Double(fileSize) * 8.0 / durationInSeconds / 1000.0)
+                    }
+                    
+                    // 所有属性更新都在主线程进行
+                    await MainActor.run {
+                        self.audioInfo.sampleRate = tempSampleRate
+                        self.audioInfo.channels = tempChannels
+                        self.audioInfo.bitrate = tempBitrate
+                    }
+                }
+            } catch {
+                print("加载音频信息错误: \(error)")
+            }
         }
     }
     
