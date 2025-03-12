@@ -12,6 +12,14 @@ class PlayerViewModel: NSObject, ObservableObject {
     @Published var errorMessage: String?
     @Published var audioInfo: AudioInfo = AudioInfo()
     
+    // 排序类型枚举
+    enum SortType {
+        case title
+        case artist
+        case album
+        case random
+    }
+    
     public var audioPlayer: AVPlayer?
     private var timeObserver: Any?
     private var securityScopedURLs = [URL]()
@@ -341,6 +349,28 @@ class PlayerViewModel: NSObject, ObservableObject {
             
             // 从播放列表中移除
             playlist.remove(at: index)
+        }
+    }
+    
+    // 对播放列表进行排序
+    func sortPlaylist(by sortType: SortType) {
+        // 保存当前播放歌曲的ID以便排序后重新定位
+        let currentSongId = currentSong?.id
+        
+        switch sortType {
+        case .title:
+            playlist.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case .artist:
+            playlist.sort { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
+        case .album:
+            playlist.sort { $0.album.localizedCaseInsensitiveCompare($1.album) == .orderedAscending }
+        case .random:
+            playlist.shuffle()
+        }
+        
+        // 如果需要，更新当前播放歌曲的引用
+        if let id = currentSongId, let index = playlist.firstIndex(where: { $0.id == id }) {
+            currentSong = playlist[index]
         }
     }
     
