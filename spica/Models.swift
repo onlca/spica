@@ -20,4 +20,5 @@ struct SecureSong: Identifiable {
     let artwork: NSImage?
     var lyrics: [LyricLine] = []  // 保存带时间戳的歌词
     var securityScoped: Bool = false
+    var tracknumber: Int
 }

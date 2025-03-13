@@ -65,7 +65,8 @@ def get_tags(file_path):
             "artist": "未知艺术家",
             "album": "未知专辑",
             "artwork": None,
-            "lyrics": []
+            "lyrics": [],
+            "tracknumber": "",
         }
         
         # 尝试加载文件
@@ -85,6 +86,8 @@ def get_tags(file_path):
                     result["artist"] = str(id3['TPE1'])
                 if 'TALB' in id3:
                     result["album"] = str(id3['TALB'])
+                if 'TRCK' in id3:
+                    result["tracknumber"] = str(id3['TRCK'])
                 
                 # 提取歌词
                 lyrics_text = None
@@ -136,6 +139,8 @@ def get_tags(file_path):
                     result["artist"] = audio["ARTIST"][0]
                 if "ALBUM" in audio:
                     result["album"] = audio["ALBUM"][0]
+                if "tracknumber" in audio:
+                    result["tracknumber"] = audio["tracknumber"][0]
                     
                 # 读取歌词 (LYRICS标签)
                 if "LYRICS" in audio:
@@ -166,6 +171,8 @@ def get_tags(file_path):
                         result["artist"] = str(tags["artist"][0])
                     if "album" in tags:
                         result["album"] = str(tags["album"][0])
+                    if "tracknumber" in tags:
+                        result["tracknumber"] = str(tags["tracknumber"][0])
                     if "lyrics" in tags:
                         lyrics_text = str(tags["lyrics"][0])
                         result["lyrics"] = parse_lyrics_with_timestamps(lyrics_text)
@@ -177,7 +184,8 @@ def get_tags(file_path):
             "title": result["title"],
             "artist": result["artist"],
             "album": result["album"],
-            "lyrics": result["lyrics"]
+            "lyrics": result["lyrics"],
+            "tracknumber": result["tracknumber"]
         }
         
         print(json.dumps(metadata_result))
@@ -196,7 +204,8 @@ def get_tags(file_path):
             "title": Path(file_path).stem,
             "artist": "未知艺术家",
             "album": "未知专辑",
-            "lyrics": []
+            "lyrics": [],
+            "tracknumber": "",
         }
         print(json.dumps(error_result))
         sys.stdout.flush()

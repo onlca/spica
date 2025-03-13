@@ -7,7 +7,7 @@ class PythonScriptHelper {
     
     private init() {}
     
-    func runTagParser(for url: URL, completion: @escaping (String?, String?, String?, [LyricLine]?, NSImage?) -> Void) {
+    func runTagParser(for url: URL, completion: @escaping (String?, String?, String?, [LyricLine]?, NSImage?, Int?) -> Void) {
         // 确保Python脚本存在
         guard let scriptURL = Bundle.main.url(forResource: "TagParser", withExtension: "py") else {
             fallbackToAVFoundation(url: url, completion: completion)
@@ -52,6 +52,8 @@ class PythonScriptHelper {
                     let title = json["title"] as? String
                     let artist = json["artist"] as? String
                     let album = json["album"] as? String
+                    let tracknumber_str = json["tracknumber"] as? String
+                    let tracknumber = Int(tracknumber_str ?? "") ?? 0
                     
                     // 解析歌词数据
                     var lyricLines: [LyricLine] = []
@@ -91,7 +93,7 @@ class PythonScriptHelper {
                     // 在主线程创建NSImage并回调结果
                     DispatchQueue.main.async {
                         let artwork = artworkData.flatMap { NSImage(data: $0) }
-                        completion(title, artist, album, lyricLines, artwork)
+                        completion(title, artist, album, lyricLines, artwork, tracknumber)
                     }
                 } else {
                     // 如果没有有效的JSON输出，使用AVFoundation
@@ -104,10 +106,11 @@ class PythonScriptHelper {
     }
     
     // 使用AVFoundation作为备用方案
-    private func fallbackToAVFoundation(url: URL, completion: @escaping (String?, String?, String?, [LyricLine]?, NSImage?) -> Void) {
+    private func fallbackToAVFoundation(url: URL, completion: @escaping (String?, String?, String?, [LyricLine]?, NSImage?, Int?) -> Void) {
         let title = url.deletingPathExtension().lastPathComponent
         let artist = "未知艺术家"
         let album = "未知专辑"
+        let tracknumber = 0
         
         Task {
             let asset = AVURLAsset(url: url)
@@ -118,6 +121,7 @@ class PythonScriptHelper {
                 var finalTitle = title
                 var finalArtist = artist
                 var finalAlbum = album
+                var finalTracknumber = tracknumber
                 
                 // 从元数据中提取信息
                 for item in metadata {
@@ -137,6 +141,10 @@ class PythonScriptHelper {
                             }
                         case .commonKeyArtwork:
                             artworkData = try await item.load(.dataValue)
+                        case .iTunesMetadataKeyTrackNumber:
+                            if let value = try await item.load(.numberValue) as? Int {
+                                finalTracknumber = value
+                            }
                         default:
                             break
                         }
@@ -148,11 +156,12 @@ class PythonScriptHelper {
                 let immutableTitle = finalTitle
                 let immutableArtist = finalArtist
                 let immutableAlbum = finalAlbum
+                let immutableTracknumber = finalTracknumber
                 
                 // 在主线程上创建NSImage并回调结果
                 await MainActor.run {
                     let artwork = immutableArtworkData.flatMap { NSImage(data: $0) }
-                    completion(immutableTitle, immutableArtist, immutableAlbum, [], artwork)
+                    completion(immutableTitle, immutableArtist, immutableAlbum, [], artwork, immutableTracknumber)
                 }
             } catch {
                 // 如果提取失败，返回默认值
@@ -161,7 +170,7 @@ class PythonScriptHelper {
                 let immutableAlbum = album
                 
                 await MainActor.run {
-                    completion(immutableTitle, immutableArtist, immutableAlbum, [], nil)
+                    completion(immutableTitle, immutableArtist, immutableAlbum, [], nil, 0)
                 }
             }
         }

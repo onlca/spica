@@ -175,11 +175,12 @@ class PlayerViewModel: NSObject, ObservableObject {
                 
                 // 创建任务组以等待异步完成
                 await withCheckedContinuation { continuation in
-                    pythonHelper.runTagParser(for: url) { title, artist, album, lyrics, artwork in
+                    pythonHelper.runTagParser(for: url) { title, artist, album, lyrics, artwork, tracknumber in
                         let finalTitle = title ?? url.deletingPathExtension().lastPathComponent
                         let finalArtist = artist ?? "未知艺术家"
                         let finalAlbum = album ?? "未知专辑"
                         let finalLyrics = lyrics ?? []
+                        let finalTracknumber = tracknumber ?? 0
                         
                         let newSong = SecureSong(
                             title: finalTitle,
@@ -189,7 +190,8 @@ class PlayerViewModel: NSObject, ObservableObject {
                             fileURL: url,
                             artwork: artwork,
                             lyrics: finalLyrics,
-                            securityScoped: true
+                            securityScoped: true,
+                            tracknumber: finalTracknumber
                         )
                         
                         Task { @MainActor in
@@ -363,7 +365,12 @@ class PlayerViewModel: NSObject, ObservableObject {
         case .artist:
             playlist.sort { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
         case .album:
-            playlist.sort { $0.album.localizedCaseInsensitiveCompare($1.album) == .orderedAscending }
+        playlist.sort {
+            if $0.album != $1.album {
+                return $0.album.localizedCaseInsensitiveCompare($1.album) == .orderedAscending
+            }
+            return $0.tracknumber <= $1.tracknumber
+        }
         case .random:
             playlist.shuffle()
         }
