@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var viewModel = PlayerViewModel()
     @State private var showFileImporter = false
+    @State private var showingSettings = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -13,6 +14,7 @@ struct ContentView: View {
                 // 第二栏：播放器控制
                 PlayerDetailView(viewModel: viewModel)
                     .navigationTitle("spica")
+
             } detail: {
                 // 第三栏：歌词视图
                 LyricsDetailView(viewModel: viewModel)
@@ -33,6 +35,19 @@ struct ContentView: View {
             Button("确定", role: .cancel) { viewModel.errorMessage = nil }
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+        .toolbar {            
+            // 设置按钮
+            ToolbarItem() {
+                Button(action: {
+                    showingSettings = true
+                }) {
+                    Image(systemName: "gear")
+                }
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
         }
     }
     

@@ -25,7 +25,7 @@ class PythonScriptHelper {
             task.environment = environment
             
             // 设置Python路径和参数
-            task.executableURL = URL(fileURLWithPath: "/opt/anaconda3/bin/python3")
+            task.executableURL = URL(fileURLWithPath: SettingsModel.shared.pythonExecutablePath)
             task.arguments = [scriptURL.path, url.path]
             
             // 设置管道
