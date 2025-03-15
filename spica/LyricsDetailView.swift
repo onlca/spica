@@ -1,4 +1,3 @@
-// filepath: /Users/oplia/Documents/spica/spica/LyricsDetailView.swift
 import SwiftUI
 
 struct LyricsDetailView: View {
