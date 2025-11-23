@@ -52,22 +52,45 @@ class PlayerViewModel: NSObject, ObservableObject {
     
     // 设置媒体远程控制命令
     private func setupMediaRemoteCommands() {
+        // 启用播放/暂停切换命令
+        mediaRemoteCommandCenter.togglePlayPauseCommand.isEnabled = true
         mediaRemoteCommandCenter.togglePlayPauseCommand.addTarget { [weak self] event in
             guard let self = self, let currentSong = self.currentSong else {
                 return .noActionableNowPlayingItem
             }
             
-            if !self.isPlaying {
-                self.play(song: currentSong)
-                return .success
-            }
-            else {
+            if self.isPlaying {
                 self.pause()
-                return .success
+            } else {
+                self.play(song: currentSong)
             }
+            return .success
+        }
+        
+        // 启用播放命令
+        mediaRemoteCommandCenter.playCommand.isEnabled = true
+        mediaRemoteCommandCenter.playCommand.addTarget { [weak self] event in
+            guard let self = self, let currentSong = self.currentSong else {
+                return .noActionableNowPlayingItem
+            }
+            
+            self.play(song: currentSong)
+            return .success
+        }
+        
+        // 启用暂停命令
+        mediaRemoteCommandCenter.pauseCommand.isEnabled = true
+        mediaRemoteCommandCenter.pauseCommand.addTarget { [weak self] event in
+            guard let self = self else {
+                return .noActionableNowPlayingItem
+            }
+            
+            self.pause()
+            return .success
         }
         
         // 下一曲命令
+        mediaRemoteCommandCenter.nextTrackCommand.isEnabled = true
         mediaRemoteCommandCenter.nextTrackCommand.addTarget { [weak self] event in
             guard let self = self,
                   let currentSong = self.currentSong,
@@ -83,6 +106,7 @@ class PlayerViewModel: NSObject, ObservableObject {
         }
         
         // 上一曲命令
+        mediaRemoteCommandCenter.previousTrackCommand.isEnabled = true
         mediaRemoteCommandCenter.previousTrackCommand.addTarget { [weak self] event in
             guard let self = self,
                   let currentSong = self.currentSong,
@@ -98,6 +122,7 @@ class PlayerViewModel: NSObject, ObservableObject {
         }
         
         // 跳转命令
+        mediaRemoteCommandCenter.changePlaybackPositionCommand.isEnabled = true
         mediaRemoteCommandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let self = self,
                   let player = self.audioPlayer,
@@ -469,6 +494,8 @@ class PlayerViewModel: NSObject, ObservableObject {
         
         // 清除媒体控制命令
         mediaRemoteCommandCenter.togglePlayPauseCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.playCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.pauseCommand.removeTarget(nil)
         mediaRemoteCommandCenter.nextTrackCommand.removeTarget(nil)
         mediaRemoteCommandCenter.previousTrackCommand.removeTarget(nil)
         mediaRemoteCommandCenter.changePlaybackPositionCommand.removeTarget(nil)
