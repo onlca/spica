@@ -4,6 +4,7 @@ import Combine
 struct LyricsView: View {
     let lyrics: [LyricLine]
     @ObservedObject var viewModel: PlayerViewModel
+    @ObservedObject private var settings = SettingsModel.shared
     @State private var currentIndex: Int = 0
     @State private var scrollProxy: ScrollViewProxy? = nil
     
@@ -22,20 +23,31 @@ struct LyricsView: View {
                         Color.clear.frame(height: 80)
                         
                         ForEach(lyrics.indices, id: \.self) { index in
-                            Text(lyrics[index].text)
-                                .font(.system(size: 16))
-                                .foregroundColor(index == currentIndex ? .primary : .secondary)
-                                .fontWeight(index == currentIndex ? .bold : .regular)
-                                .padding(.vertical, 5)
-                                .padding(.horizontal, 10)
-                                .id(index)  // 设置ID用于滚动定位
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(index == currentIndex ? 
-                                              Color.accentColor.opacity(0.2) : Color.clear)
-                                )
-                                .animation(.easeInOut(duration: 0.3), value: currentIndex)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            HStack(spacing: 8) {
+                                // 时间戳（调试模式）
+                                if settings.showLyricTimestamps {
+                                    Text(formatTimestamp(lyrics[index].timestamp))
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(.secondary.opacity(0.6))
+                                        .frame(width: 50, alignment: .trailing)
+                                }
+                                
+                                // 歌词文本
+                                Text(lyrics[index].text)
+                                    .font(.system(size: 16))
+                                    .foregroundColor(index == currentIndex ? .primary : .secondary)
+                                    .fontWeight(index == currentIndex ? .bold : .regular)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            .id(index)  // 设置ID用于滚动定位
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(index == currentIndex ? 
+                                          Color.accentColor.opacity(0.2) : Color.clear)
+                            )
+                            .animation(.easeInOut(duration: 0.3), value: currentIndex)
                         }
                         
                         // 底部留白，确保末行歌词能居中显示
@@ -127,5 +139,15 @@ struct LyricsView: View {
                 scrollProxy?.scrollTo(currentIndex, anchor: .center)
             }
         }
+    }
+    
+    // 格式化时间戳显示
+    private func formatTimestamp(_ timestamp: Double) -> String {
+        if timestamp < 0 {
+            return "--:--"
+        }
+        let minutes = Int(timestamp) / 60
+        let seconds = Int(timestamp) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }

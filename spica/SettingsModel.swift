@@ -4,7 +4,13 @@ import Combine
 class SettingsModel: ObservableObject {
     static let shared = SettingsModel()
     
+    @Published var showLyricTimestamps: Bool {
+        didSet {
+            UserDefaults.standard.set(showLyricTimestamps, forKey: "showLyricTimestamps")
+        }
+    }
+    
     init() {
-        // 保留作为将来设置的占位符
+        self.showLyricTimestamps = UserDefaults.standard.bool(forKey: "showLyricTimestamps")
     }
 }
