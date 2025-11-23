@@ -11,6 +11,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     @Published var playlist: [SecureSong] = []
     @Published var errorMessage: String?
     @Published var audioInfo: AudioInfo = AudioInfo()
+    @Published var isLoadingLibrary = false
     
     // 排序类型枚举
     enum SortType {
@@ -26,6 +27,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     private var playerItemObservation: NSKeyValueObservation?
     private var mediaRemoteCommandCenter: MPRemoteCommandCenter
     private var nowPlayingInfoCenter: MPNowPlayingInfoCenter
+    private var musicFolderURL: URL?  // 保存音乐文件夹 URL 用于访问权限
     
     // 音频格式信息结构体
     struct AudioInfo {
@@ -48,6 +50,74 @@ class PlayerViewModel: NSObject, ObservableObject {
         
         // 设置媒体控制命令
         setupMediaRemoteCommands()
+        
+        // 启动时自动加载音乐库
+        Task {
+            await loadMusicLibrary()
+        }
+    }
+    
+    // 加载音乐库
+    func loadMusicLibrary() async {
+        guard let folderURL = SettingsModel.shared.musicFolderURL else {
+            return
+        }
+        
+        // 停止之前的文件夹访问
+        if let oldFolder = musicFolderURL {
+            oldFolder.stopAccessingSecurityScopedResource()
+        }
+        
+        // 启动新文件夹的访问权限
+        guard folderURL.startAccessingSecurityScopedResource() else {
+            await MainActor.run {
+                self.errorMessage = "无法访问音乐文件夹"
+            }
+            return
+        }
+        
+        await MainActor.run {
+            isLoadingLibrary = true
+            // 保存文件夹 URL（已经启动访问权限）
+            self.musicFolderURL = folderURL
+        }
+        
+        do {
+            let songs = try await MusicLibraryManager.shared.loadMusicLibrary(from: folderURL)
+            await MainActor.run {
+                self.playlist = songs
+                self.isLoadingLibrary = false
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "加载音乐库失败: \(error.localizedDescription)"
+                self.isLoadingLibrary = false
+            }
+        }
+    }
+    
+    // 刷新音乐库
+    func refreshMusicLibrary() async {
+        guard let folderURL = SettingsModel.shared.musicFolderURL else {
+            return
+        }
+        
+        await MainActor.run {
+            isLoadingLibrary = true
+        }
+        
+        do {
+            let songs = try await MusicLibraryManager.shared.refreshMusicLibrary(from: folderURL)
+            await MainActor.run {
+                self.playlist = songs
+                self.isLoadingLibrary = false
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "刷新音乐库失败: \(error.localizedDescription)"
+                self.isLoadingLibrary = false
+            }
+        }
     }
     
     // 设置媒体远程控制命令
@@ -243,10 +313,14 @@ class PlayerViewModel: NSObject, ObservableObject {
         // 停止当前播放并清理
         cleanupCurrentPlayback()
         
-        guard song.fileURL.startAccessingSecurityScopedResource() else {
-            errorMessage = "播放权限获取失败"
-            return
+        // 如果是手动添加的歌曲（securityScoped=true），需要启动文件访问权限
+        if song.securityScoped {
+            guard song.fileURL.startAccessingSecurityScopedResource() else {
+                errorMessage = "播放权限获取失败"
+                return
+            }
         }
+        // 从音乐库加载的歌曲（securityScoped=false）使用文件夹的持续访问权限，不需要额外操作
         
         // 创建新的播放项
         let playerItem = AVPlayerItem(url: song.fileURL)
@@ -269,6 +343,25 @@ class PlayerViewModel: NSObject, ObservableObject {
         currentSong = song
         audioPlayer?.play()
         isPlaying = true
+        
+        // 如果封面未加载，异步加载
+        if song.artwork == nil {
+            Task {
+                if let artwork = await MusicLibraryManager.shared.loadArtwork(for: song) {
+                    await MainActor.run {
+                        // 更新 playlist 中的歌曲
+                        if let index = self.playlist.firstIndex(where: { $0.id == song.id }) {
+                            self.playlist[index].artwork = artwork
+                        }
+                        // 更新当前播放歌曲
+                        if self.currentSong?.id == song.id {
+                            self.currentSong?.artwork = artwork
+                            self.updateNowPlayingInfo()
+                        }
+                    }
+                }
+            }
+        }
         
         // 更新媒体控制信息
         updateNowPlayingInfo()
@@ -491,6 +584,11 @@ class PlayerViewModel: NSObject, ObservableObject {
     deinit {
         cleanupCurrentPlayback()
         releaseSecurityScopedResources()
+        
+        // 停止音乐文件夹访问
+        if let folderURL = musicFolderURL {
+            folderURL.stopAccessingSecurityScopedResource()
+        }
         
         // 清除媒体控制命令
         mediaRemoteCommandCenter.togglePlayPauseCommand.removeTarget(nil)

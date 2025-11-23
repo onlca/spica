@@ -18,30 +18,30 @@ class AudioTagParser {
     private init() {}
     
     /// 解析音频文件的标签信息
-    func parseTags(from url: URL) async throws -> AudioTags {
+    func parseTags(from url: URL, loadArtwork: Bool = true) async throws -> AudioTags {
         let fileExtension = url.pathExtension.lowercased()
         
         switch fileExtension {
         case "mp3":
-            return try await parseMP3Tags(from: url)
+            return try await parseMP3Tags(from: url, loadArtwork: loadArtwork)
         case "flac":
-            return try await parseFLACTags(from: url)
+            return try await parseFLACTags(from: url, loadArtwork: loadArtwork)
         default:
             throw AudioTagError.unsupportedFormat
         }
     }
     
     // MARK: - MP3/ID3 解析
-    private func parseMP3Tags(from url: URL) async throws -> AudioTags {
+    private func parseMP3Tags(from url: URL, loadArtwork: Bool) async throws -> AudioTags {
         let data = try Data(contentsOf: url)
-        let parser = ID3Parser(data: data)
+        let parser = ID3Parser(data: data, loadArtwork: loadArtwork)
         return try parser.parse()
     }
     
     // MARK: - FLAC 解析
-    private func parseFLACTags(from url: URL) async throws -> AudioTags {
+    private func parseFLACTags(from url: URL, loadArtwork: Bool) async throws -> AudioTags {
         let data = try Data(contentsOf: url)
-        let parser = FLACParser(data: data)
+        let parser = FLACParser(data: data, loadArtwork: loadArtwork)
         return try parser.parse()
     }
 }
@@ -74,9 +74,11 @@ enum AudioTagError: Error {
 class ID3Parser {
     private let data: Data
     private var offset: Int = 0
+    private let loadArtwork: Bool
     
-    init(data: Data) {
+    init(data: Data, loadArtwork: Bool = true) {
         self.data = data
+        self.loadArtwork = loadArtwork
     }
     
     func parse() throws -> AudioTags {
@@ -180,7 +182,9 @@ class ID3Parser {
             case "USLT": // 非同步歌词
                 lyricsText = decodeUnsyncedLyrics(frameData)
             case "APIC": // 封面图片
-                artworkData = decodeAPIC(frameData)
+                if loadArtwork {
+                    artworkData = decodeAPIC(frameData)
+                }
             default:
                 break
             }
@@ -191,8 +195,8 @@ class ID3Parser {
         // 解析歌词时间戳
         let lyrics = parseLyrics(lyricsText ?? "")
         
-        // 创建封面图像
-        let artwork = artworkData.flatMap { NSImage(data: $0) }
+        // 创建封面图像（仅在加载图片时）
+        let artwork = loadArtwork ? artworkData.flatMap { NSImage(data: $0) } : nil
         
         return AudioTags(
             title: title ?? "未知标题",
@@ -360,9 +364,11 @@ class ID3Parser {
 class FLACParser {
     private let data: Data
     private var offset: Int = 0
+    private let loadArtwork: Bool
     
-    init(data: Data) {
+    init(data: Data, loadArtwork: Bool = true) {
         self.data = data
+        self.loadArtwork = loadArtwork
     }
     
     func parse() throws -> AudioTags {
@@ -420,7 +426,9 @@ class FLACParser {
                 }
                 
             case 6: // Picture
-                artworkData = parsePictureBlock(blockData)
+                if loadArtwork {
+                    artworkData = parsePictureBlock(blockData)
+                }
                 
             default:
                 break
@@ -432,8 +440,8 @@ class FLACParser {
         // 解析歌词
         let lyrics = parseLyrics(lyricsText ?? "")
         
-        // 创建封面
-        let artwork = artworkData.flatMap { NSImage(data: $0) }
+        // 创建封面（仅在加载图片时）
+        let artwork = loadArtwork ? artworkData.flatMap { NSImage(data: $0) } : nil
         
         return AudioTags(
             title: title ?? "未知标题",
