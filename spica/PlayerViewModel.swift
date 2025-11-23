@@ -195,36 +195,36 @@ class PlayerViewModel: NSObject, ObservableObject {
                     duration = 0
                 }
                 
-                // 使用 Python 脚本解析标签
-                let pythonHelper = PythonScriptHelper.shared
+                // 使用新的 Swift 音频标签解析器
+                let tags: AudioTags
+                do {
+                    tags = try await AudioTagParser.shared.parseTags(from: url)
+                } catch {
+                    // 解析失败时使用默认值
+                    tags = AudioTags(
+                        title: url.deletingPathExtension().lastPathComponent,
+                        artist: "未知艺术家",
+                        album: "未知专辑",
+                        trackNumber: 0,
+                        lyrics: [],
+                        artwork: nil
+                    )
+                }
                 
-                // 创建任务组以等待异步完成
-                await withCheckedContinuation { continuation in
-                    pythonHelper.runTagParser(for: url) { title, artist, album, lyrics, artwork, tracknumber in
-                        let finalTitle = title ?? url.deletingPathExtension().lastPathComponent
-                        let finalArtist = artist ?? "未知艺术家"
-                        let finalAlbum = album ?? "未知专辑"
-                        let finalLyrics = lyrics ?? []
-                        let finalTracknumber = tracknumber ?? 0
-                        
-                        let newSong = SecureSong(
-                            title: finalTitle,
-                            artist: finalArtist,
-                            album: finalAlbum,
-                            duration: duration,
-                            fileURL: url,
-                            artwork: artwork,
-                            lyrics: finalLyrics,
-                            securityScoped: true,
-                            tracknumber: finalTracknumber
-                        )
-                        
-                        Task { @MainActor in
-                            self.playlist.append(newSong)
-                        }
-                        
-                        continuation.resume()
-                    }
+                let newSong = SecureSong(
+                    title: tags.title,
+                    artist: tags.artist,
+                    album: tags.album,
+                    duration: duration,
+                    fileURL: url,
+                    artwork: tags.artwork,
+                    lyrics: tags.lyrics,
+                    securityScoped: true,
+                    tracknumber: tags.trackNumber
+                )
+                
+                await MainActor.run {
+                    self.playlist.append(newSong)
                 }
             }
         }
