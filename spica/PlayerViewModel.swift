@@ -28,6 +28,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     private var mediaRemoteCommandCenter: MPRemoteCommandCenter
     private var nowPlayingInfoCenter: MPNowPlayingInfoCenter
     private var musicFolderURL: URL?  // 保存音乐文件夹 URL 用于访问权限
+    private var playbackStateTimer: Timer?  // 定期保存播放状态的定时器
     
     // 音频格式信息结构体
     struct AudioInfo {
@@ -54,6 +55,13 @@ class PlayerViewModel: NSObject, ObservableObject {
         // 启动时自动加载音乐库
         Task {
             await loadMusicLibrary()
+            // 加载完成后恢复播放状态
+            await restorePlaybackState()
+        }
+        
+        // 启动定时器，每5秒保存一次播放状态
+        playbackStateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.savePlaybackState()
         }
     }
     
@@ -120,8 +128,95 @@ class PlayerViewModel: NSObject, ObservableObject {
         }
     }
     
+    // MARK: - 播放状态持久化
+    
+    // 保存播放状态
+    func savePlaybackState() {
+        guard let folderURL = musicFolderURL else { return }
+        
+        let state = PlaybackState(
+            currentSongURLPath: currentSong?.fileURL.path.replacingOccurrences(of: folderURL.path + "/", with: ""),
+            playlistOrder: playlist.map { $0.fileURL.path.replacingOccurrences(of: folderURL.path + "/", with: "") }
+        )
+        
+        if let encoded = try? JSONEncoder().encode(state) {
+            UserDefaults.standard.set(encoded, forKey: PlaybackState.userDefaultsKey)
+        }
+    }
+    
+    // 恢复播放状态
+    func restorePlaybackState() async {
+        guard let folderURL = musicFolderURL,
+              let data = UserDefaults.standard.data(forKey: PlaybackState.userDefaultsKey),
+              let state = try? JSONDecoder().decode(PlaybackState.self, from: data) else {
+            return
+        }
+        
+        await MainActor.run {
+            // 恢复播放列表顺序
+            if !state.playlistOrder.isEmpty {
+                let orderedPlaylist = state.playlistOrder.compactMap { relativePath -> SecureSong? in
+                    let fullPath = folderURL.appendingPathComponent(relativePath)
+                    return self.playlist.first { $0.fileURL == fullPath }
+                }
+                
+                // 如果恢复的列表不为空，使用它
+                if !orderedPlaylist.isEmpty {
+                    self.playlist = orderedPlaylist
+                }
+            }
+            
+            // 恢复当前播放歌曲（但不恢复播放位置）
+            if let currentPath = state.currentSongURLPath {
+                let fullPath = folderURL.appendingPathComponent(currentPath)
+                if let song = self.playlist.first(where: { $0.fileURL == fullPath }) {
+                    // 设置当前歌曲但不自动播放
+                    self.currentSong = song
+                    
+                    // 创建播放器（从头开始）
+                    if song.securityScoped {
+                        _ = song.fileURL.startAccessingSecurityScopedResource()
+                    }
+                    
+                    let playerItem = AVPlayerItem(url: song.fileURL)
+                    self.audioPlayer = AVPlayer(playerItem: playerItem)
+                    
+                    // 设置观察者
+                    self.setupPlayerObservers()
+                    self.extractAudioInfo(from: song.fileURL)
+                    
+                    // 如果封面未加载，异步加载
+                    if song.artwork == nil {
+                        Task {
+                            if let artwork = await MusicLibraryManager.shared.loadArtwork(for: song) {
+                                await MainActor.run {
+                                    if let index = self.playlist.firstIndex(where: { $0.id == song.id }) {
+                                        self.playlist[index].artwork = artwork
+                                    }
+                                    if self.currentSong?.id == song.id {
+                                        self.currentSong?.artwork = artwork
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    print("已恢复播放状态: \(song.title)")
+                }
+            }
+        }
+    }
+    
     // 设置媒体远程控制命令
     private func setupMediaRemoteCommands() {
+        // 先移除所有已存在的 target
+        mediaRemoteCommandCenter.togglePlayPauseCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.playCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.pauseCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.nextTrackCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.previousTrackCommand.removeTarget(nil)
+        mediaRemoteCommandCenter.changePlaybackPositionCommand.removeTarget(nil)
+        
         // 启用播放/暂停切换命令
         mediaRemoteCommandCenter.togglePlayPauseCommand.isEnabled = true
         mediaRemoteCommandCenter.togglePlayPauseCommand.addTarget { [weak self] event in
@@ -391,6 +486,12 @@ class PlayerViewModel: NSObject, ObservableObject {
         
         // 移除所有通知
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
+        
+        // 清空播放器引用
+        audioPlayer = nil
+        
+        // 更新播放状态
+        isPlaying = false
     }
     
     // 播放结束处理
@@ -497,6 +598,9 @@ class PlayerViewModel: NSObject, ObservableObject {
         if let id = currentSongId, let index = playlist.firstIndex(where: { $0.id == id }) {
             currentSong = playlist[index]
         }
+        
+        // 保存新的播放列表顺序
+        savePlaybackState()
     }
     
     // 提取音频格式信息
@@ -582,6 +686,13 @@ class PlayerViewModel: NSObject, ObservableObject {
     }
     
     deinit {
+        // 保存最终播放状态
+        savePlaybackState()
+        
+        // 停止定时器
+        playbackStateTimer?.invalidate()
+        playbackStateTimer = nil
+        
         cleanupCurrentPlayback()
         releaseSecurityScopedResources()
         

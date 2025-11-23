@@ -38,3 +38,11 @@ struct CachedSongMetadata: Codable {
         let text: String
     }
 }
+
+// 播放状态（用于持久化）
+struct PlaybackState: Codable {
+    let currentSongURLPath: String?  // 当前播放歌曲的文件路径
+    let playlistOrder: [String]      // 播放列表顺序（文件路径数组）
+    
+    static let userDefaultsKey = "PlaybackState"
+}
