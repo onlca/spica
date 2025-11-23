@@ -29,6 +29,8 @@ class PlayerViewModel: NSObject, ObservableObject {
     private var nowPlayingInfoCenter: MPNowPlayingInfoCenter
     private var musicFolderURL: URL?  // 保存音乐文件夹 URL 用于访问权限
     private var playbackStateTimer: Timer?  // 定期保存播放状态的定时器
+    private var pendingSeekPosition: Double?  // 待跳转的播放位置（0-1之间）
+    private var isSeeking = false  // 标记是否正在跳转
     
     // 音频格式信息结构体
     struct AudioInfo {
@@ -166,26 +168,15 @@ class PlayerViewModel: NSObject, ObservableObject {
                 }
             }
             
-            // 恢复当前播放歌曲（但不恢复播放位置）
+            // 恢复当前播放歌曲（但不创建播放器）
             if let currentPath = state.currentSongURLPath {
                 let fullPath = folderURL.appendingPathComponent(currentPath)
                 if let song = self.playlist.first(where: { $0.fileURL == fullPath }) {
-                    // 设置当前歌曲但不自动播放
+                    // 只设置当前歌曲，不创建播放器
+                    // 播放器会在用户点击播放、拖动进度条或执行其他操作时自动创建
                     self.currentSong = song
                     
-                    // 创建播放器（从头开始）
-                    if song.securityScoped {
-                        _ = song.fileURL.startAccessingSecurityScopedResource()
-                    }
-                    
-                    let playerItem = AVPlayerItem(url: song.fileURL)
-                    self.audioPlayer = AVPlayer(playerItem: playerItem)
-                    
-                    // 设置观察者
-                    self.setupPlayerObservers()
-                    self.extractAudioInfo(from: song.fileURL)
-                    
-                    // 如果封面未加载，异步加载
+                    // 异步加载封面
                     if song.artwork == nil {
                         Task {
                             if let artwork = await MusicLibraryManager.shared.loadArtwork(for: song) {
@@ -399,6 +390,41 @@ class PlayerViewModel: NSObject, ObservableObject {
     func play(song: SecureSong) {
         // 如果是继续播放同一首歌曲
         if let currentSong = currentSong, currentSong.id == song.id {
+            // 如果播放器不存在，需要创建
+            if audioPlayer == nil {
+                // 创建播放器
+                if song.securityScoped {
+                    guard song.fileURL.startAccessingSecurityScopedResource() else {
+                        errorMessage = "播放权限获取失败"
+                        return
+                    }
+                }
+                
+                let playerItem = AVPlayerItem(url: song.fileURL)
+                audioPlayer = AVPlayer(playerItem: playerItem)
+                setupPlayerObservers()
+                extractAudioInfo(from: song.fileURL)
+                
+                // 添加播放结束通知
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(playerDidFinishPlaying),
+                    name: .AVPlayerItemDidPlayToEndTime,
+                    object: playerItem
+                )
+                
+                // 如果有待跳转的位置，执行跳转
+                if let seekPosition = pendingSeekPosition, let player = audioPlayer {
+                    performSeek(player: player, progress: seekPosition)
+                }
+            } else {
+                // 播放器已存在，如果有待跳转位置，先执行跳转
+                if let seekPosition = pendingSeekPosition, let player = audioPlayer {
+                    performSeek(player: player, progress: seekPosition)
+                }
+            }
+            
+            // 开始播放
             audioPlayer?.play()
             isPlaying = true
             updateNowPlayingInfo()
@@ -523,6 +549,10 @@ class PlayerViewModel: NSObject, ObservableObject {
             queue: .main
         ) { [weak self] time in
             guard let self = self, let duration = self.audioPlayer?.currentItem?.duration else { return }
+            // 如果正在跳转，不更新进度显示
+            if self.isSeeking {
+                return
+            }
             if !duration.seconds.isNaN && duration.seconds > 0 {
                 self.progress = time.seconds / duration.seconds
                 
@@ -545,6 +575,59 @@ class PlayerViewModel: NSObject, ObservableObject {
         
         // 清除媒体控制信息
         nowPlayingInfoCenter.nowPlayingInfo = nil
+    }
+    
+    // 跳转到指定进度（0-1之间的比例）
+    func seek(to progress: Double) {
+        // 设置跳转标志
+        isSeeking = true
+        
+        // 保存待跳转位置
+        pendingSeekPosition = progress
+        
+        // 立即更新进度显示，避免视觉闪烁
+        self.progress = progress
+        
+        // 如果没有播放器，等待播放时再跳转
+        guard let player = audioPlayer else {
+            return
+        }
+        
+        // 立即执行跳转
+        performSeek(player: player, progress: progress)
+    }
+    
+    // 执行实际的跳转操作
+    private func performSeek(player: AVPlayer, progress: Double) {
+        guard let duration = player.currentItem?.duration,
+              duration.seconds.isFinite && duration.seconds > 0 else {
+            // 如果 duration 还没准备好，等待后重试
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                guard let self = self, let player = self.audioPlayer else { return }
+                self.performSeek(player: player, progress: progress)
+            }
+            return
+        }
+        
+        let targetTime = duration.seconds * progress
+        let time = CMTime(seconds: targetTime, preferredTimescale: 600)
+        
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            if finished {
+                DispatchQueue.main.async {
+                    // 更新进度显示
+                    self?.progress = progress
+                    // 清除待跳转位置
+                    if self?.pendingSeekPosition == progress {
+                        self?.pendingSeekPosition = nil
+                    }
+                    // 清除跳转标志，允许时间观察者更新进度
+                    self?.isSeeking = false
+                    // 更新媒体控制信息
+                    self?.updateNowPlayingInfo()
+                }
+            }
+        }
     }
     
     // 释放资源

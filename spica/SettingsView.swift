@@ -26,10 +26,11 @@ struct SettingsView: View {
             
             Divider()
             
-            // 设置内容区域
-            VStack(spacing: 24) {
-                // 音乐库设置
-                VStack(alignment: .leading, spacing: 12) {
+            // 设置内容区域（添加滚动视图）
+            ScrollView {
+                VStack(spacing: 24) {
+                    // 音乐库设置
+                    VStack(alignment: .leading, spacing: 12) {
                     Label("音乐库", systemImage: "music.note.list")
                         .font(.headline)
                         .foregroundColor(.accentColor)
@@ -169,11 +170,10 @@ struct SettingsView: View {
                     .background(Color(.controlBackgroundColor))
                     .cornerRadius(10)
                 }
-                
-                Spacer()
             }
             .padding(.horizontal, 30)
             .padding(.vertical, 20)
+            }
             
             Divider()
             

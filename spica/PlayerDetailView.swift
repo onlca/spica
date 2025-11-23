@@ -13,13 +13,33 @@ struct PlayerDetailView: View {
                     // 播放控制
                     PlaybackControlsView(viewModel: viewModel)
                     
-                    // 时间进度
-                    ProgressView(value: viewModel.progress.isNaN ? 0 : viewModel.progress) {
-                        let currentTime = viewModel.audioPlayer?.currentTime().seconds ?? 0
-                        Text(timeString(time: currentTime))
-                    } currentValueLabel: {
-                        // 使用歌曲实际总时长，而不是计算值
-                        Text(timeString(time: song.duration))
+                    // 时间进度和拖动条
+                    VStack(spacing: 8) {
+                        Slider(
+                            value: Binding(
+                                get: { viewModel.progress.isNaN ? 0 : viewModel.progress },
+                                set: { newValue in
+                                    viewModel.seek(to: newValue)
+                                }
+                            ),
+                            in: 0...1
+                        )
+                        .controlSize(.regular)
+                        
+                        HStack {
+                            let currentTime = viewModel.audioPlayer?.currentTime().seconds ?? 0
+                            Text(timeString(time: currentTime))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .monospacedDigit()
+                            
+                            Spacer()
+                            
+                            Text(timeString(time: song.duration))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .monospacedDigit()
+                        }
                     }
                     .padding(.horizontal)
                 }
