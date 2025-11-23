@@ -10,7 +10,7 @@ struct LyricsView: View {
     
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 12) {
                     if lyrics.isEmpty {
                         Text("暂无歌词")
@@ -63,9 +63,6 @@ struct LyricsView: View {
                 updateCurrentLyric()
             }
         }
-        .listStyle(.sidebar)
-        .background(Color(.textBackgroundColor).opacity(0.2))
-        .cornerRadius(8)
         // 监听播放进度变化，更新当前歌词 - 使用新的onChange API
         .onChange(of: viewModel.progress) { oldValue, newValue in
             updateCurrentLyric()

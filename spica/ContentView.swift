@@ -64,12 +64,32 @@ struct ContentView: View {
 // 底部状态栏视图
 struct AudioInfoStatusBar: View {
     @ObservedObject var viewModel: PlayerViewModel
+    @ObservedObject private var settings = SettingsModel.shared
     
     var body: some View {
-        if viewModel.currentSong != nil {
-            HStack {
+        if settings.showStatusBar && viewModel.currentSong != nil {
+            HStack(spacing: 0) {
+                // 当前播放位置
+                if let currentSong = viewModel.currentSong,
+                   let currentIndex = viewModel.playlist.firstIndex(where: { $0.id == currentSong.id }) {
+                    Text("\(currentIndex + 1)/\(viewModel.playlist.count)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 12)
+                }
+                
                 Divider()
                     .frame(height: 15)
+                    .padding(.horizontal, 8)
+                
+                // 播放列表总时长
+                Text(formatTotalDuration(viewModel.playlist.map { $0.duration }.reduce(0, +)))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                
+                Divider()
+                    .frame(height: 15)
+                    .padding(.horizontal, 8)
                 
                 // 文件格式
                 Text(viewModel.audioInfo.fileFormat)
@@ -77,6 +97,7 @@ struct AudioInfoStatusBar: View {
                 
                 Divider()
                     .frame(height: 15)
+                    .padding(.horizontal, 8)
                 
                 // 比特率
                 Text("\(viewModel.audioInfo.bitrate) kbps")
@@ -84,6 +105,7 @@ struct AudioInfoStatusBar: View {
                 
                 Divider()
                     .frame(height: 15)
+                    .padding(.horizontal, 8)
                 
                 // 采样率
                 Text(String(format: "%.1f kHz", viewModel.audioInfo.sampleRate / 1000))
@@ -91,6 +113,7 @@ struct AudioInfoStatusBar: View {
                 
                 Divider()
                     .frame(height: 15)
+                    .padding(.horizontal, 8)
                 
                 // 声道信息
                 Text("\(viewModel.audioInfo.channels)声道")
@@ -98,6 +121,7 @@ struct AudioInfoStatusBar: View {
                 
                 Divider()
                     .frame(height: 15)
+                    .padding(.horizontal, 8)
                 
                 // 文件大小
                 Text(viewModel.audioInfo.formattedFileSize)
@@ -105,11 +129,27 @@ struct AudioInfoStatusBar: View {
                 
                 Spacer()
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 4)
             .frame(height: 24)
             .background(.ultraThinMaterial)
         } else {
             EmptyView()
+        }
+    }
+    
+    // 格式化总时长
+    private func formatTotalDuration(_ totalSeconds: Double) -> String {
+        let totalInt = Int(totalSeconds)
+        let days = totalInt / 86400
+        let hours = (totalInt % 86400) / 3600
+        let minutes = (totalInt % 3600) / 60
+        
+        if days > 0 {
+            return "\(days)天\(hours)小时\(minutes)分"
+        } else if hours > 0 {
+            return "\(hours)小时\(minutes)分"
+        } else {
+            return "\(minutes)分"
         }
     }
 }

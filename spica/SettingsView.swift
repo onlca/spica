@@ -26,22 +26,44 @@ struct SettingsView: View {
             
             // 设置内容区域
             VStack(spacing: 24) {
-                // 歌词显示选项
+                // 显示选项
                 VStack(alignment: .leading, spacing: 12) {
-                    Label("歌词显示", systemImage: "text.alignleft")
+                    Label("显示选项", systemImage: "eye")
                         .font(.headline)
                         .foregroundColor(.accentColor)
                     
                     VStack(spacing: 0) {
+                        // 显示时间戳
                         Toggle(isOn: $settings.showLyricTimestamps) {
                             HStack {
                                 Image(systemName: "clock.fill")
                                     .foregroundColor(.accentColor)
                                     .frame(width: 20)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("显示时间戳")
+                                    Text("显示歌词时间戳")
                                         .font(.body)
                                     Text("在歌词前显示时间信息")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .toggleStyle(.switch)
+                        .padding()
+                        
+                        Divider()
+                            .padding(.horizontal)
+                        
+                        // 显示状态栏
+                        Toggle(isOn: $settings.showStatusBar) {
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("显示底部状态栏")
+                                        .font(.body)
+                                    Text("显示音频信息和播放统计")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
@@ -75,6 +97,6 @@ struct SettingsView: View {
             .padding(.vertical, 16)
             .background(Color(.controlBackgroundColor).opacity(0.5))
         }
-        .frame(width: 500, height: 300)
+        .frame(width: 500, height: 350)
     }
 }

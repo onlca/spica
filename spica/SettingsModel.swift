@@ -10,7 +10,14 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    @Published var showStatusBar: Bool {
+        didSet {
+            UserDefaults.standard.set(showStatusBar, forKey: "showStatusBar")
+        }
+    }
+    
     init() {
         self.showLyricTimestamps = UserDefaults.standard.bool(forKey: "showLyricTimestamps")
+        self.showStatusBar = UserDefaults.standard.object(forKey: "showStatusBar") as? Bool ?? true
     }
 }
