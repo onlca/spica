@@ -48,6 +48,10 @@ struct LyricsView: View {
                                           Color.accentColor.opacity(0.2) : Color.clear)
                             )
                             .animation(.easeInOut(duration: 0.3), value: currentIndex)
+                            .contentShape(Rectangle())  // 使整个区域可点击
+                            .onTapGesture {
+                                seekToLyric(at: index)
+                            }
                         }
                         
                         // 底部留白，确保末行歌词能居中显示
@@ -146,5 +150,33 @@ struct LyricsView: View {
         let minutes = Int(timestamp) / 60
         let seconds = Int(timestamp) % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+    
+    // 点击歌词跳转到对应时间
+    private func seekToLyric(at index: Int) {
+        guard index >= 0 && index < lyrics.count else { return }
+        let lyric = lyrics[index]
+        
+        // 如果歌词有时间戳，跳转到该时间
+        if lyric.timestamp >= 0 {
+            guard let currentSong = viewModel.currentSong,
+                  currentSong.duration > 0 else { return }
+            
+            // 计算进度比例（0-1之间）
+            let progress = lyric.timestamp / currentSong.duration
+            
+            // 更新当前歌词索引
+            currentIndex = index
+            
+            // 如果当前没有播放，先启动播放再跳转
+            if !viewModel.isPlaying {
+                // 先跳转再播放，这样播放器创建后会应用待跳转位置
+                viewModel.seek(to: progress)
+                viewModel.play(song: currentSong)
+            } else {
+                // 如果正在播放，直接跳转
+                viewModel.seek(to: progress)
+            }
+        }
     }
 }

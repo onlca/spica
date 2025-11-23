@@ -413,21 +413,36 @@ class PlayerViewModel: NSObject, ObservableObject {
                     object: playerItem
                 )
                 
-                // 如果有待跳转的位置，执行跳转
+                // 如果有待跳转的位置，先跳转再播放
                 if let seekPosition = pendingSeekPosition, let player = audioPlayer {
-                    performSeek(player: player, progress: seekPosition)
+                    performSeek(player: player, progress: seekPosition) { [weak self] in
+                        // 跳转完成后再开始播放
+                        self?.audioPlayer?.play()
+                        self?.isPlaying = true
+                        self?.updateNowPlayingInfo()
+                    }
+                } else {
+                    // 没有待跳转位置，直接播放
+                    audioPlayer?.play()
+                    isPlaying = true
+                    updateNowPlayingInfo()
                 }
             } else {
                 // 播放器已存在，如果有待跳转位置，先执行跳转
                 if let seekPosition = pendingSeekPosition, let player = audioPlayer {
-                    performSeek(player: player, progress: seekPosition)
+                    performSeek(player: player, progress: seekPosition) { [weak self] in
+                        // 跳转完成后再开始播放
+                        self?.audioPlayer?.play()
+                        self?.isPlaying = true
+                        self?.updateNowPlayingInfo()
+                    }
+                } else {
+                    // 没有待跳转位置，直接播放
+                    audioPlayer?.play()
+                    isPlaying = true
+                    updateNowPlayingInfo()
                 }
             }
-            
-            // 开始播放
-            audioPlayer?.play()
-            isPlaying = true
-            updateNowPlayingInfo()
             return
         }
         
@@ -598,13 +613,13 @@ class PlayerViewModel: NSObject, ObservableObject {
     }
     
     // 执行实际的跳转操作
-    private func performSeek(player: AVPlayer, progress: Double) {
+    private func performSeek(player: AVPlayer, progress: Double, completion: (() -> Void)? = nil) {
         guard let duration = player.currentItem?.duration,
               duration.seconds.isFinite && duration.seconds > 0 else {
             // 如果 duration 还没准备好，等待后重试
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 guard let self = self, let player = self.audioPlayer else { return }
-                self.performSeek(player: player, progress: progress)
+                self.performSeek(player: player, progress: progress, completion: completion)
             }
             return
         }
@@ -625,6 +640,8 @@ class PlayerViewModel: NSObject, ObservableObject {
                     self?.isSeeking = false
                     // 更新媒体控制信息
                     self?.updateNowPlayingInfo()
+                    // 执行完成回调
+                    completion?()
                 }
             }
         }
