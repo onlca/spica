@@ -43,14 +43,9 @@ struct PlayerDetailView: View {
 
 struct EmptyStateView: View {
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "music.note.list")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
-            Text("选择左侧歌曲开始播放")
-                .font(.title3)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxHeight: .infinity)
+        Image(systemName: "music.note.list")
+            .font(.system(size: 64))
+            .foregroundColor(.secondary.opacity(0.3))
+            .frame(maxHeight: .infinity)
     }
 }
