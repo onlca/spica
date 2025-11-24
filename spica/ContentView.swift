@@ -4,20 +4,31 @@ struct ContentView: View {
     @StateObject private var viewModel = PlayerViewModel()
     @State private var showFileImporter = false
     @State private var showingSettings = false
+    @State private var showLyrics = false
     
     var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView {
-                // 第一栏：播放列表
+                // 左栏：播放列表
                 PlaylistView(viewModel: viewModel, showFileImporter: $showFileImporter)
-            } content: {
-                // 第二栏：播放器控制
-                PlayerDetailView(viewModel: viewModel)
-                    .navigationTitle("spica")
             } detail: {
-                // 第三栏：歌词视图
-                LyricsDetailView(viewModel: viewModel)
-                    .navigationTitle("歌词")
+                // 右栏：播放器控制和歌词
+                HStack(spacing: 0) {
+                    // 播放器控制区域
+                    PlayerDetailView(viewModel: viewModel)
+                        .navigationTitle("spica")
+                        .frame(minWidth: 300, idealWidth: 400)
+                    
+                    // 歌词面板（可切换显示/隐藏）
+                    if showLyrics {
+                        Divider()
+                        
+                        LyricsDetailView(viewModel: viewModel)
+                            .frame(minWidth: 250, idealWidth: 350, maxWidth: 500)
+                            .transition(.move(edge: .trailing))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: showLyrics)
             }
             
             // 底部状态栏
@@ -35,14 +46,26 @@ struct ContentView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
-        .toolbar {            
+        .toolbar {
+            // 歌词切换按钮
+            ToolbarItem(placement: .automatic) {
+                Button(action: {
+                    showLyrics.toggle()
+                }) {
+                    Label("歌词", systemImage: showLyrics ? "text.quote" : "text.quote")
+                }
+                .help(showLyrics ? "隐藏歌词" : "显示歌词")
+                .keyboardShortcut("l", modifiers: .command)
+            }
+            
             // 设置按钮
-            ToolbarItem() {
+            ToolbarItem(placement: .automatic) {
                 Button(action: {
                     showingSettings = true
                 }) {
                     Image(systemName: "gear")
                 }
+                .help("设置")
             }
         }
         .sheet(isPresented: $showingSettings) {
