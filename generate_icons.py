@@ -28,15 +28,15 @@ ICON_SIZES = {
     "icon-512.png": 512,
     "icon-512@2x.png": 1024,
     # iOS 和通用图标
-    "icon-1024.png": 1024,
+    # "icon-1024.png": 1024,
 }
 
 # 额外的命名变体（用于 Contents.json 中的不同引用）
 EXTRA_NAMES = {
-    32: ["icon-32 1.png"],
-    256: ["icon-256 1.png"],
-    512: ["icon-512 1.png"],
-    1024: ["icon-512@2x 1.png", "icon-512@2x 2.png", "icon-512@2x 3.png"],
+    #32: ["icon-32 1.png"],
+    #256: ["icon-256 1.png"],
+    #512: ["icon-512 1.png"],
+    #1024: ["icon-512@2x 1.png", "icon-512@2x 2.png", "icon-512@2x 3.png"],
 }
 
 

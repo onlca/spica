@@ -14,7 +14,6 @@ struct ContentView: View {
                 // 第二栏：播放器控制
                 PlayerDetailView(viewModel: viewModel)
                     .navigationTitle("spica")
-
             } detail: {
                 // 第三栏：歌词视图
                 LyricsDetailView(viewModel: viewModel)
