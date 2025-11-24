@@ -192,6 +192,14 @@ struct SettingsView: View {
             .background(Color(.controlBackgroundColor).opacity(0.5))
         }
         .frame(width: 550, height: 500)
+        .onChange(of: settings.musicFolderURL) { oldValue, newValue in
+            // 当音乐文件夹改变时，自动加载音乐库
+            if newValue != nil {
+                Task {
+                    await viewModel.loadMusicLibrary()
+                }
+            }
+        }
     }
     
     // 选择音乐文件夹
@@ -206,10 +214,6 @@ struct SettingsView: View {
         panel.begin { response in
             if response == .OK, let url = panel.url {
                 settings.musicFolderURL = url
-                // 加载音乐库
-                Task {
-                    await viewModel.loadMusicLibrary()
-                }
             }
         }
     }
