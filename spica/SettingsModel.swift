@@ -19,6 +19,9 @@ class SettingsModel: ObservableObject {
     @Published var musicFolderURL: URL? {
         didSet {
             if let url = musicFolderURL {
+                // 启动访问权限（创建 bookmark 需要访问权限）
+                let didStartAccessing = url.startAccessingSecurityScopedResource()
+                
                 // 保存 bookmark 数据
                 do {
                     let bookmarkData = try url.bookmarkData(
@@ -29,6 +32,11 @@ class SettingsModel: ObservableObject {
                     UserDefaults.standard.set(bookmarkData, forKey: "musicFolderBookmark")
                 } catch {
                     print("保存书签失败: \(error)")
+                }
+                
+                // 停止访问权限
+                if didStartAccessing {
+                    url.stopAccessingSecurityScopedResource()
                 }
             } else {
                 UserDefaults.standard.removeObject(forKey: "musicFolderBookmark")
