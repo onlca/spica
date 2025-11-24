@@ -176,6 +176,9 @@ class PlayerViewModel: NSObject, ObservableObject {
                     // 播放器会在用户点击播放、拖动进度条或执行其他操作时自动创建
                     self.currentSong = song
                     
+                    // 提取音频信息以显示在状态栏
+                    self.extractAudioInfo(from: song.fileURL)
+                    
                     // 异步加载封面
                     if song.artwork == nil {
                         Task {
