@@ -32,11 +32,5 @@ spica music player: 支持内嵌歌词显示的macOS音乐播放器
 
 ## Acknowledgements
 
-开发过程中使用的工具：
-
-- Github Copilot
-- Claude 3.5 Sonnet
-- Claude 3.7 Sonnet
-
 参考项目：
 - [Mutagen](https://github.com/quodlibet/mutagen) - Python 音频元数据库
