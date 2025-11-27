@@ -1,8 +1,19 @@
 #!/bin/bash
 set -e
 
+CONFIGURATION="Debug"
+
+# Parse arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --release) CONFIGURATION="Release" ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
+
 # Path to the built app
-APP_PATH="./build/Build/Products/Debug/spica.app"
+APP_PATH="./build/Build/Products/$CONFIGURATION/spica.app"
 
 if [ -d "$APP_PATH" ]; then
     echo "Launching $APP_PATH..."
