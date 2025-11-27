@@ -103,15 +103,9 @@ struct PlaylistView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                viewModel.removeSongFromPlaylist(song)
-                            } label: {
-                                Label("删除", systemImage: "trash")
-                            }
-                        }
+
                     }
-                    .onMove(perform: viewModel.moveSong)
+
                 }
                 .listStyle(.plain)
             }

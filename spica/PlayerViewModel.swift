@@ -147,11 +147,10 @@ class PlayerViewModel: NSObject, ObservableObject {
     
     // 保存播放状态
     func savePlaybackState() {
-        guard let folderURL = musicFolderURL else { return }
-        
+        // 保存所有歌曲的绝对路径
         let state = PlaybackState(
-            currentSongURLPath: currentSong?.fileURL.path.replacingOccurrences(of: folderURL.path + "/", with: ""),
-            playlistOrder: playlist.map { $0.fileURL.path.replacingOccurrences(of: folderURL.path + "/", with: "") }
+            currentSongURLPath: currentSong?.fileURL.path,
+            playlistOrder: playlist.map { $0.fileURL.path }
         )
         
         if let encoded = try? JSONEncoder().encode(state) {
@@ -161,8 +160,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     
     // 恢复播放状态
     func restorePlaybackState() async {
-        guard let folderURL = musicFolderURL,
-              let data = UserDefaults.standard.data(forKey: PlaybackState.userDefaultsKey),
+        guard let data = UserDefaults.standard.data(forKey: PlaybackState.userDefaultsKey),
               let state = try? JSONDecoder().decode(PlaybackState.self, from: data) else {
             return
         }
@@ -170,26 +168,65 @@ class PlayerViewModel: NSObject, ObservableObject {
         await MainActor.run {
             // 恢复播放列表顺序
             if !state.playlistOrder.isEmpty {
-                let orderedPlaylist = state.playlistOrder.compactMap { relativePath -> SecureSong? in
-                    let fullPath = folderURL.appendingPathComponent(relativePath)
-                    return self.playlist.first { $0.fileURL == fullPath }
+                var newPlaylist: [SecureSong] = []
+                
+                for path in state.playlistOrder {
+                    let fileURL = URL(fileURLWithPath: path)
+                    
+                    // 1. 尝试从已加载的库中查找（避免重复解析）
+                    if let existingSong = self.playlist.first(where: { $0.fileURL.path == path }) {
+                        newPlaylist.append(existingSong)
+                        continue
+                    }
+                    
+                    // 2. 如果文件存在但不在库中（可能是 ad-hoc 添加的），尝试恢复
+                    if FileManager.default.fileExists(atPath: path) {
+                        // 创建临时 SecureSong，稍后异步解析元数据
+                        // 注意：这里我们暂时没有元数据，需要异步加载
+                        // 为了简单起见，我们先用文件名作为标题
+                        let song = SecureSong(
+                            title: fileURL.deletingPathExtension().lastPathComponent,
+                            artist: "未知艺术家",
+                            album: "未知专辑",
+                            duration: 0,
+                            fileURL: fileURL,
+                            artwork: nil,
+                            lyrics: [],
+                            securityScoped: true, // 假设外部文件需要安全访问
+                            tracknumber: 0
+                        )
+                        newPlaylist.append(song)
+                        
+                        // 异步加载完整元数据
+                        Task {
+                            if let fullSong = await self.loadSongMetadata(for: fileURL) {
+                                await MainActor.run {
+                                    if let index = self.playlist.firstIndex(where: { $0.fileURL == fileURL }) {
+                                        self.playlist[index] = fullSong
+                                    }
+                                    if self.currentSong?.fileURL == fileURL {
+                                        let wasPlaying = self.isPlaying
+                                        self.currentSong = fullSong
+                                        if wasPlaying {
+                                            self.updateNowPlayingInfo()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 // 如果恢复的列表不为空，使用它
-                if !orderedPlaylist.isEmpty {
-                    self.playlist = orderedPlaylist
+                if !newPlaylist.isEmpty {
+                    self.playlist = newPlaylist
                 }
             }
             
-            // 恢复当前播放歌曲（但不创建播放器）
+            // 恢复当前播放歌曲
             if let currentPath = state.currentSongURLPath {
-                let fullPath = folderURL.appendingPathComponent(currentPath)
-                if let song = self.playlist.first(where: { $0.fileURL == fullPath }) {
-                    // 只设置当前歌曲，不创建播放器
-                    // 播放器会在用户点击播放、拖动进度条或执行其他操作时自动创建
+                if let song = self.playlist.first(where: { $0.fileURL.path == currentPath }) {
                     self.currentSong = song
-                    
-                    // 提取音频信息以显示在状态栏
                     self.extractAudioInfo(from: song.fileURL)
                     
                     // 异步加载封面
@@ -207,11 +244,52 @@ class PlayerViewModel: NSObject, ObservableObject {
                             }
                         }
                     }
-                    
                     print("已恢复播放状态: \(song.title)")
                 }
             }
         }
+    }
+    
+    // 辅助方法：加载单个歌曲元数据
+    private func loadSongMetadata(for url: URL) async -> SecureSong? {
+        // 如果需要，尝试获取权限
+        let needsAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if needsAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        // 获取持续时间
+        let asset = AVURLAsset(url: url)
+        var duration: Double = 0
+        do {
+            let durationValue = try await asset.load(.duration)
+            duration = CMTimeGetSeconds(durationValue)
+            if duration.isNaN { duration = 0 }
+        } catch {
+            duration = 0
+        }
+        
+        // 解析标签
+        let tags: AudioTags
+        do {
+            tags = try await AudioTagParser.shared.parseTags(from: url)
+        } catch {
+            return nil
+        }
+        
+        return SecureSong(
+            title: tags.title,
+            artist: tags.artist,
+            album: tags.album,
+            duration: duration,
+            fileURL: url,
+            artwork: tags.artwork,
+            lyrics: tags.lyrics,
+            securityScoped: true,
+            tracknumber: tags.trackNumber
+        )
     }
     
     // 设置媒体远程控制命令
@@ -669,25 +747,7 @@ class PlayerViewModel: NSObject, ObservableObject {
         securityScopedURLs.removeAll()
     }
     
-    // 处理从播放列表中删除歌曲
-    func removeSongFromPlaylist(_ song: SecureSong) {
-        if let index = playlist.firstIndex(where: { $0.id == song.id }) {
-            // 如果删除的是当前播放的歌曲，先停止播放
-            if currentSong?.id == song.id {
-                stop()
-                currentSong = nil
-            }
-            
-            // 从安全资源列表中移除
-            if let urlIndex = securityScopedURLs.firstIndex(of: song.fileURL) {
-                song.fileURL.stopAccessingSecurityScopedResource()
-                securityScopedURLs.remove(at: urlIndex)
-            }
-            
-            // 从播放列表中移除
-            playlist.remove(at: index)
-        }
-    }
+
     
     // 对播放列表进行排序
     func sortPlaylist(by sortType: SortType) {
@@ -719,14 +779,7 @@ class PlayerViewModel: NSObject, ObservableObject {
         savePlaybackState()
     }
     
-    // 移动歌曲（用于拖拽排序）
-    func moveSong(from source: IndexSet, to destination: Int) {
-        // 如果正在搜索，不允许排序（或者只在显示全部列表时允许）
-        guard searchText.isEmpty else { return }
-        
-        playlist.move(fromOffsets: source, toOffset: destination)
-        savePlaybackState()
-    }
+
     
     // 提取音频格式信息
     private func extractAudioInfo(from url: URL) {
