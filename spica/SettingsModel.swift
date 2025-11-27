@@ -44,6 +44,25 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    // 播放列表显示设置
+    @Published var showPlaylistArtist = true {
+        didSet {
+            UserDefaults.standard.set(showPlaylistArtist, forKey: "ShowPlaylistArtist")
+        }
+    }
+    
+    @Published var showPlaylistAlbum = true {
+        didSet {
+            UserDefaults.standard.set(showPlaylistAlbum, forKey: "ShowPlaylistAlbum")
+        }
+    }
+    
+    @Published var showPlaylistDuration = true {
+        didSet {
+            UserDefaults.standard.set(showPlaylistDuration, forKey: "ShowPlaylistDuration")
+        }
+    }
+    
     init() {
         self.showLyricTimestamps = UserDefaults.standard.bool(forKey: "showLyricTimestamps")
         self.showStatusBar = UserDefaults.standard.object(forKey: "showStatusBar") as? Bool ?? true

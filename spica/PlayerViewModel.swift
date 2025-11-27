@@ -12,6 +12,19 @@ class PlayerViewModel: NSObject, ObservableObject {
     @Published var errorMessage: String?
     @Published var audioInfo: AudioInfo = AudioInfo()
     @Published var isLoadingLibrary = false
+    @Published var searchText = ""
+    
+    var filteredPlaylist: [SecureSong] {
+        if searchText.isEmpty {
+            return playlist
+        } else {
+            return playlist.filter { song in
+                song.title.localizedCaseInsensitiveContains(searchText) ||
+                song.artist.localizedCaseInsensitiveContains(searchText) ||
+                song.album.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
     
     // 排序类型枚举
     enum SortType {
@@ -703,6 +716,15 @@ class PlayerViewModel: NSObject, ObservableObject {
         }
         
         // 保存新的播放列表顺序
+        savePlaybackState()
+    }
+    
+    // 移动歌曲（用于拖拽排序）
+    func moveSong(from source: IndexSet, to destination: Int) {
+        // 如果正在搜索，不允许排序（或者只在显示全部列表时允许）
+        guard searchText.isEmpty else { return }
+        
+        playlist.move(fromOffsets: source, toOffset: destination)
         savePlaybackState()
     }
     

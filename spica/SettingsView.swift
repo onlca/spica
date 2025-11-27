@@ -170,6 +170,68 @@ struct SettingsView: View {
                     .background(Color(.controlBackgroundColor))
                     .cornerRadius(10)
                 }
+                
+                // 播放列表设置
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("播放列表", systemImage: "list.bullet")
+                        .font(.headline)
+                        .foregroundColor(.accentColor)
+                    
+                    VStack(spacing: 0) {
+                        // 显示艺术家
+                        Toggle(isOn: $settings.showPlaylistArtist) {
+                            HStack {
+                                Image(systemName: "music.mic")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("显示艺术家")
+                                        .font(.body)
+                                }
+                            }
+                        }
+                        .toggleStyle(.switch)
+                        .padding()
+                        
+                        Divider()
+                            .padding(.horizontal)
+                        
+                        // 显示专辑
+                        Toggle(isOn: $settings.showPlaylistAlbum) {
+                            HStack {
+                                Image(systemName: "square.stack")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("显示专辑")
+                                        .font(.body)
+                                }
+                            }
+                        }
+                        .toggleStyle(.switch)
+                        .padding()
+                        
+                        Divider()
+                            .padding(.horizontal)
+                        
+                        // 显示时长
+                        Toggle(isOn: $settings.showPlaylistDuration) {
+                            HStack {
+                                Image(systemName: "clock")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("显示时长")
+                                        .font(.body)
+                                }
+                            }
+                        }
+                        .toggleStyle(.switch)
+                        .padding()
+                    }
+                    .background(Color(.controlBackgroundColor))
+                    .cornerRadius(10)
+                }
             }
             .padding(.horizontal, 30)
             .padding(.vertical, 20)
