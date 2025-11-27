@@ -1,0 +1,36 @@
+# Xcode
+.DS_Store
+*/.DS_Store
+*.swp
+*.swo
+*~
+*.lock
+*.log
+
+# Build generated
+build/
+DerivedData/
+
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/xcuserdata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.ouput
+*.moved-aside
+*.xccheckout
+*.moved-aside
+
+# User settings
+*.xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+Package.pins
+Package.resolved
