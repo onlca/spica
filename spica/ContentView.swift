@@ -13,18 +13,16 @@ struct ContentView: View {
                 PlaylistView(viewModel: viewModel, showFileImporter: $showFileImporter)
             } detail: {
                 // 右栏：播放器控制和歌词
-                HStack(spacing: 0) {
+                HSplitView {
                     // 播放器控制区域
                     PlayerDetailView(viewModel: viewModel)
                         .navigationTitle("spica")
-                        .frame(minWidth: 300, idealWidth: 400)
+                        .frame(minWidth: 300, idealWidth: 400, maxWidth: .infinity)
                     
                     // 歌词面板（可切换显示/隐藏）
                     if showLyrics {
-                        Divider()
-                        
                         LyricsDetailView(viewModel: viewModel)
-                            .frame(minWidth: 250, idealWidth: 350, maxWidth: 500)
+                            .frame(minWidth: 200, idealWidth: 350)
                             .transition(.move(edge: .trailing))
                     }
                 }
